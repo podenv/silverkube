@@ -22,7 +22,7 @@ from textwrap import dedent
 
 KUBE_VERSION = "v1.15.3"
 KUBE_RELEASE_URL = "https://storage.googleapis.com/kubernetes-release/release"
-CONF_DIR = Path("/var/lib/k2s")
+SRC_DIR = Path("~/.cache/silverkube-sources").expanduser()
 
 
 def execute(args: List[str], cwd: Path = Path(".")) -> None:
@@ -30,15 +30,22 @@ def execute(args: List[str], cwd: Path = Path(".")) -> None:
         raise RuntimeError(f"failed: {args}")
 
 
-def fetch_binaries() -> List[str]:
-    def kube_binary(name, hash) -> Tuple[str, str, str]:
+def clone(url: str, dest: Path) -> Path:
+    if (dest / ".git").exists():
+        return dest
+    execute(["git", "clone", url, str(dest)])
+    return dest
+
+
+def fetch_kube() -> List[Path]:
+    def kube_binary(name: str, hash: str) -> Tuple[str, str, str]:
         return (
             name,
             f"{KUBE_RELEASE_URL}/{KUBE_VERSION}/bin/linux/amd64/{name}",
             hash
         )
 
-    binaries: List[str] = []
+    paths: List[Path] = []
     for tool, url, hash in (
             kube_binary(
                 "kube-apiserver",
@@ -57,70 +64,65 @@ def fetch_binaries() -> List[str]:
                 "dc08c9ad350d0046bc2ec910dcd266bd30cb6e7ef1f9170bb8df455d9d"
                 "083d73"
             )):
-        if Path(tool).exists():
+        path = SRC_DIR / tool
+        if path.exists():
             # TODO: check hash
             pass
         else:
-            raise NotImplementedError("Download is not implemented")
-        binaries.append(tool)
-    # TODO: depack etcd
-    binaries.append("etcd")
-    return binaries
+            # TODO: check hash
+            execute(["curl", "-o", str(path), "-L", url])
+        paths.append(path)
+    return paths
 
 
-def build_crio() -> List[str]:
-    if not (Path("cri-o") / ".git").exists():
-        execute(["git", "clone", "https://github.com/cri-o/cri-o"])
-    if not (Path("cri-o") / "bin" / "crio").exists():
-        execute(["sudo", "yum", "install", "-y", "btrfs-progs-devel",
-                 "containers-common",
-                 "device-mapper-devel",
-                 "git",
-                 "glib2-devel",
-                 "glibc-devel",
-                 "glibc-static",
-                 "go",
-                 "gpgme-devel",
-                 "libassuan-devel",
-                 "libgpg-error-devel",
-                 "libseccomp-devel",
-                 "libselinux-devel",
-                 "pkgconfig",
-                 "runc"])
-        execute(["make", "BUILDTAGS='seccomp apparmor'"], Path("cri-o"))
-    if not Path("crio").exists():
-        execute(["cp", str(Path("cri-o") / "bin" / "crio"), "."])
-    return ["crio"]
+def fetch_etcd() -> List[Path]:
+    url = (
+        "https://github.com/etcd-io/etcd/releases/download/"
+        "v3.4.0/etcd-v3.4.0-linux-amd64.tar.gz"
+    )
+    dest = SRC_DIR / Path(url).name
+    if not dest.exists():
+        execute(["curl", "-o", str(dest), "-L", url])
+        # TODO: check hash
+    path = SRC_DIR / "etcd-v3.4.0-linux-amd64" / "etcd"
+    if not path.exists():
+        execute(["tar", "-C", str(SRC_DIR), "-xzf", str(dest),
+                 "--no-same-owner"])
+    return [path]
 
 
-def build_cni() -> List[str]:
-    if not (Path("plugins") / ".git").exists():
-        execute(["git", "clone",
-                 "https://github.com/containernetworking/plugins"])
-    if not (Path("plugins") / "bin" / "portmap").exists():
-        execute(["git", "checkout", "v0.8.1"], Path("plugins"))
-        execute(["./build_linux.sh"], Path("plugins"))
-    plugins = listdir("plugins/bin")
-    for plugin in plugins:
-        if not Path(plugin).exists():
-            execute(["cp", str(Path("plugins") / "bin" / plugin), "."])
-    return plugins
+def build_crio() -> List[Path]:
+    crio = clone("https://github.com/cri-o/cri-o", SRC_DIR / "cri-o")
+    # TODO: pin a commit sha
+    path = crio / "bin" / "crio"
+    if not path.exists():
+        execute(["make", "BUILDTAGS='seccomp'"], crio)
+    return [path]
 
 
-def build_conmon() -> List[str]:
-    if not (Path("conmon.git") / ".git").exists():
-        execute(["git", "clone",
-                 "https://github.com/containers/conmon",
-                 "conmon.git"])
-    if not (Path("conmon.git") / "bin" / "conmon").exists():
-        execute(["make"], Path("conmon.git"))
-    if not Path("conmon").exists():
-        execute(["cp", str(Path("conmon.git") / "bin" / "conmon"), "."])
-    return ["conmon"]
+def build_conmon() -> List[Path]:
+    conmon = clone(
+        "https://github.com/containers/conmon", SRC_DIR / "conmon.git")
+    # TODO: pin a commit sha
+    path = conmon / "bin" / "conmon"
+    if not path.exists():
+        execute(["make"], conmon)
+    return [path]
 
 
-def generate_services() -> List[str]:
-    services: List[str] = []
+def build_cni() -> List[Path]:
+    cni = clone(
+        "https://github.com/containernetworking/plugins", SRC_DIR / "cni")
+    if not (cni / "bin" / "portmap").exists():
+        # TODO: pin a commit sha
+        execute(["git", "checkout", "v0.8.1"], cni)
+        execute(["./build_linux.sh"], cni)
+    plugins = listdir(str(cni / "bin"))
+    return list(map(lambda x: cni / "bin" / x, sorted(plugins)))
+
+
+def generate_services() -> List[Path]:
+    services: List[Path] = []
     for name, args in [(
         "etcd", ["--name silverkube"]
     ), (
@@ -129,6 +131,7 @@ def generate_services() -> List[str]:
             "--insecure-bind-address=127.0.0.1",
             "--insecure-port=8043",
             "--service-account-key-file=/var/lib/silverkube/cert.pem",
+            "--allow-privileged=true",
             "--v=2"]
     ), (
         "kube-controller-manager", [
@@ -153,7 +156,8 @@ def generate_services() -> List[str]:
         ]
     )]:
         command = "/usr/libexec/silverkube/" + name + " " + " ".join(args)
-        Path("silverkube-" + name + ".service").write_text(dedent(f"""
+        path = SRC_DIR / ("silverkube-" + name + ".service")
+        path.write_text(dedent(f"""
         [Unit]
         Description=Silverkube {name}
         After=network.target
@@ -165,12 +169,13 @@ def generate_services() -> List[str]:
         [Install]
         WantedBy=multi-user.target
         """)[1:])
-        services.append(name)
+        services.append(path)
     return services
 
 
-def generate_conf():
-    Path("crio.conf").write_text(dedent("""
+def generate_conf() -> List[Path]:
+    crio = SRC_DIR / "crio.conf"
+    crio.write_text(dedent("""
         [crio]
         log_dir = "/var/log/silverkube/pods"
         [crio.api]
@@ -250,8 +255,23 @@ def generate_conf():
         enable_metrics = false
         metrics_port = 9090
     """))
-    Path("net.d").mkdir(exist_ok=True)
-    Path("net.d/bridge.conflist").write_text(dedent("""
+
+    kubelet = SRC_DIR / "kubelet-config.yaml"
+    kubelet.write_text(dedent("""
+      kind: KubeletConfiguration
+      apiVersion: kubelet.config.k8s.io/v1beta1
+      authentication:
+        anonymous:
+          enabled: true
+      clusterDomain: "silverkube"
+      resolvConf: "/etc/resolv.conf"
+    """)[1:])
+    return [crio, kubelet]
+
+
+def generate_cni_conf() -> List[Path]:
+    bridge = SRC_DIR / "bridge.conflist"
+    bridge.write_text(dedent("""
         {
             "cniVersion": "0.3.0",
             "name": "podman",
@@ -278,23 +298,37 @@ def generate_conf():
             ]
         }
     """)[1:])
-    Path("kubelet-config.yaml").write_text(dedent("""
-      kind: KubeletConfiguration
-      apiVersion: kubelet.config.k8s.io/v1beta1
-      authentication:
-        anonymous:
-          enabled: true
-      clusterDomain: "silverkube"
-      resolvConf: "/etc/resolv.conf"
-    """)[1:])
-    return ["crio.conf", "net.d/bridge.conflist", "kubelet-config.yaml"]
+    return [bridge]
 
+
+def generate_systemd_conf() -> List[Path]:
+    path = SRC_DIR / "kubelet-cgroups.conf"
+    path.write_text(dedent("""
+        # Turning on Accounting helps track down performance issues.
+        [Manager]
+        DefaultCPUAccounting=yes
+        DefaultMemoryAccounting=yes
+        DefaultBlockIOAccounting=yes
+    """))
+    return [path]
+
+
+BuildReq = set([
+    "git", "curl", "rpm-build", "make", "btrfs-progs-devel", "which", "runc",
+    "containers-common", "device-mapper-devel", "git", "glib2-devel",
+    "glibc-devel", "glibc-static", "go", "gpgme-devel", "libassuan-devel",
+    "libgpg-error-devel", "libseccomp-devel", "libselinux-devel", "pkgconfig"])
 
 if __name__ == "__main__":
-    bins = fetch_binaries() + build_crio() + build_conmon()
+    SRC_DIR.mkdir(exist_ok=True, parents=True)
+    execute(["dnf", "install", "-y"] + list(BuildReq))
+    bins = fetch_kube() + fetch_etcd() + build_crio() + build_conmon()
     cnis = build_cni()
+    systemd_confs = generate_systemd_conf()
     services = generate_services()
     confs = generate_conf()
+    cni_confs = generate_cni_conf()
+    inputs = confs + cni_confs + systemd_confs + services + bins + cnis
 
     specfile = [
         "Name: silverkube",
@@ -303,26 +337,14 @@ if __name__ == "__main__":
         "Summary: A kubernetes service for desktop",
         "",
         "License: ASL",
-        "URL: https://github.com/TristanCacqueray/silverkube",
+        "URL: https://github.com/podenv/silverkube",
         "",
-        "Requires: runc, conmon, cri-tools, kubernetes-client",
+        "Requires: runc, cri-tools, kubernetes-client, buildah",
         "",
-        "Source1: silverkube.py",
-        "# kube binaries",
+        "Source1: silverkube.py"
     ]
-    for idx, source in zip(range(50, 100), confs):
-        specfile.append(f"Source{idx}: {source}")
-
-    for idx, source in zip(range(100, 200), bins):
-        specfile.append(f"Source{idx}: {source}")
-
-    specfile.extend(["", "# cni binaries"])
-    for idx, source in zip(range(200, 300), cnis):
-        specfile.append(f"Source{idx}: {source}")
-
-    specfile.extend(["", "# service files"])
-    for idx, source in zip(range(300, 400), services):
-        specfile.append(f"Source{idx}: silverkube-{source}.service")
+    for idx, source in zip(range(100, 1000), inputs):
+        specfile.append(f"Source{idx}: {source.name}")
 
     specfile.extend([
         "",
@@ -334,68 +356,58 @@ if __name__ == "__main__":
         "%build",
         "",
         "%install",
-        "# Create state directories",
         "install -p -d -m 0700 %{buildroot}/etc/silverkube",
+        "install -p -d -m 0700 %{buildroot}/var/run/silverkube",
         "install -p -d -m 0700 %{buildroot}/var/lib/silverkube",
         "install -p -d -m 0700 %{buildroot}/var/log/silverkube",
-        "",
-        "# Install conf",
+        "install -p -D -m 0755 %{SOURCE1} %{buildroot}/bin/silverkube",
         "",
     ])
-    for idx, conf in zip(range(50, 100), confs):
-        specfile.append(
-            ("install -p -D -m 0644 %%{SOURCE%d} "
-             "%%{buildroot}/etc/silverkube/%s") % (
-                 idx, conf))
-    specfile.extend([
-        "# Install binaries",
-        "install -p -D -m 0755 %{SOURCE1} %{buildroot}/bin/silverkube"
-    ])
-    for idx, bin in zip(range(100, 200), bins):
-        specfile.append(
-            ("install -p -D -m 0755 %%{SOURCE%d} "
-             "%%{buildroot}/usr/libexec/silverkube/%s") % (
-                idx, bin))
-    for idx, bin in zip(range(200, 300), cnis):
-        specfile.append(
-            ("install -p -D -m 0755 %%{SOURCE%d} "
-             "%%{buildroot}/usr/libexec/silverkube/cni/%s") % (
-                idx, bin))
-    specfile.extend([
-        "",
-        "# Install spec files"
-    ])
-    for idx, service in zip(range(300, 400), services):
-        specfile.append(
-            ("install -p -D -m 0644 %%{SOURCE%d} "
-             "%%{buildroot}/%%{_unitdir}/silverkube-%s.service") % (
-                 idx, service))
 
-    specfile.extend("")
+    def sd(mode: str, path: str, srcs: List[Path]) -> List[Tuple[str, str]]:
+        return list(map(lambda x: (mode, path + "/" + x.name), srcs))
+
+    for idx, (mode, dest) in zip(
+            range(100, 1000),
+            sd("644", "etc/silverkube", confs) +
+            sd("644", "etc/silverkube/net.d", cni_confs) +
+            sd("644", "etc/systemd/system.conf.d", systemd_confs) +
+            sd("644", "%{_unitdir}", services) +
+            sd("755", "usr/libexec/silverkube", bins) +
+            sd("755", "usr/libexec/silverkube/cni", cnis)):
+        specfile.append(
+            "install -p -D -m 0%s %%{SOURCE%d} %%{buildroot}/%s" % (
+                mode, idx, dest))
+
     for phase in ("post", "preun", "postun"):
+        specfile.append("")
         specfile.append("%" + phase)
         for service in services:
-            specfile.append("%%systemd_%s silverkube-%s.service" % (
-                phase, service
-            ))
-        specfile.append("")
+            specfile.append(f"%systemd_{phase} {service.name}")
     specfile.extend([
-        "",
-        "%files",
+        "", "%files",
+        "%config(noreplace) /etc/systemd/system.conf.d/kubelet-cgroups.conf",
         "%config(noreplace) /etc/silverkube/crio.conf",
+        "%config(noreplace) /etc/silverkube/kubelet-config.yaml",
         "%config(noreplace) /etc/silverkube/net.d/bridge.conflist",
         "%dir /etc/silverkube",
         "%dir /var/lib/silverkube",
         "%dir /var/run/silverkube",
         "%dir /var/log/silverkube",
-        "/bin/silverkube"
+        "/bin/silverkube",
         "/usr/libexec/silverkube",
-        "%{_unitdir}/silverkube-*"
-        "",
-        "%changelog",
+        "%{_unitdir}/silverkube-*",
+        "", "%changelog",
         "* Sat Sep 21 2019 Tristan Cacqueray <tdecacqu@redhat.com>",
         "- Initial packaging"
     ])
     Path("silverkube.spec").write_text("\n".join(specfile))
-#    execute(["rpmbuild", "--define", "_sourcedir %s" % Path('.').resolve(),
-#             "-ba", "silverkube.spec"])
+
+    for local in inputs + [Path("silverkube.py")]:
+        dest = SRC_DIR / local.name
+        if not dest.exists():
+            execute(["ln", "-sf", local.resolve(), str(dest)])
+
+    execute(["rpmbuild", "--define", "_sourcedir %s" % SRC_DIR.resolve(),
+             "--define", "_topdir %s" % Path('rpmbuild').resolve(),
+             "-ba", "silverkube.spec"])

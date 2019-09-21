@@ -16,13 +16,18 @@
 from os import environ
 from subprocess import Popen, PIPE
 from time import sleep
-from typing import List
+from typing import List, Tuple
 from sys import argv
 from pathlib import Path
 from textwrap import dedent
 
-
-Services = [
+# Types
+ServiceName = str
+Command = str
+ExpectedOutput = str
+Check = Tuple[Command, ExpectedOutput]
+Service = Tuple[ServiceName, Check]
+Services: List[Service] = [
     ("etcd", ("curl http://localhost:2379/version", "etcdcluster")),
     ("kube-apiserver", ("curl http://localhost:8043/api", "APIVersions")),
     ("kube-controller-manager", None),
@@ -33,6 +38,7 @@ Services = [
 ]
 
 
+# Utility procedures
 def execute(args: List[str]) -> None:
     if Popen(args).wait():
         raise RuntimeError(f"Fail: {args}")
@@ -107,8 +113,9 @@ def down() -> int:
 def main() -> None:
     if len(argv) == 1:
         argv.append("up")
+    arg = argv[1].replace("start", "up").replace("stop", "down")
     for action in (up, down):
-        if argv[1] == action.__name__:
+        if arg == action.__name__:
             exit(action())
     else:
         print("usage: silverkube up|down")
