@@ -16,6 +16,7 @@
 """A script to start the services
 """
 
+from base64 import b64encode
 from os import environ
 from subprocess import Popen, PIPE
 from time import sleep
@@ -24,10 +25,14 @@ from sys import argv
 from pathlib import Path
 from textwrap import dedent
 
+ca = "--cacert /var/lib/silverkube/ca.pem "
 etcd_ca = (
-    "--cacert /var/lib/silverkube/ca.pem "
-    "-E /var/lib/silverkube/etcd-cert.pem "
+    f"{ca} -E /var/lib/silverkube/etcd-cert.pem "
     "--key /var/lib/silverkube/etcd-key.pem")
+api_ca = (
+    f"{ca}  -E /var/lib/silverkube/sa-cert.pem "
+    "--key /var/lib/silverkube/sa-key.pem"
+)
 
 # Types
 ServiceName = str
@@ -36,8 +41,9 @@ ExpectedOutput = str
 Check = Tuple[Command, ExpectedOutput]
 Service = Tuple[ServiceName, Check]
 Services: List[Service] = [
-    ("etcd", (f"curl {etcd_ca} https://localhost:2379/version", "etcdcluster")),
-    ("kube-apiserver", ("curl http://localhost:8043/api", "APIVersions")),
+    ("etcd", (f"curl {etcd_ca} https://localhost:2379/version", "etcdcluste")),
+    ("kube-apiserver",
+     (f"curl {api_ca} https://localhost:8043/api", "APIVersions")),
     ("kube-controller-manager", None),
     ("kube-scheduler", ("kubectl get componentstatuses", "Healthy")),
     ("crio", ("crictl --runtime-endpoint unix:///var/run/silverkube/crio.sock "
@@ -58,6 +64,9 @@ def pread(args: List[str]) -> str:
     stdout, stderr = p.communicate()
     return stdout.decode('utf-8'), stderr.decode('utf-8')
 
+
+def b64(data: str) -> str:
+    return b64encode(data.encode('utf-8')).decode('utf-8')
 
 def generate_cert(name) -> None:
     key = (dest / (name + "-key.pem"))
@@ -103,10 +112,13 @@ def generate_certs() -> None:
                  "-keyout", str(dest / "cakey.pem"),
                  "-out", str(dest / "ca.pem")])
     generate_cert("etcd")
+    generate_cert("sa")
+    generate_cert("api")
+    return (dest / "ca.pem").read_text()
 
 
 def up() -> int:
-    generate_certs()
+    ca = b64(generate_certs())
     kube_config = Path("/var/lib/silverkube/kubeconfig")
     kube_config.write_text(dedent("""
         apiVersion: v1
@@ -114,17 +126,22 @@ def up() -> int:
         preferences: {}
         clusters:
         - cluster:
-            server: http://127.0.0.1:8043
+            server: https://localhost:8043
+            certificate-authority-data: %s
           name: local
         users:
         - name: local
+          user:
+            client-key-data: %s
+            client-certificate-data: %s
         contexts:
         - context:
             cluster: local
             user: local
           name: local
         current-context: local
-    """)[1:])
+    """)[1:] % (ca, b64((dest / "sa-key.pem").read_text()),
+                b64((dest / "sa-cert.pem").read_text())))
     environ["KUBECONFIG"] = str(kube_config)
     for service, check in Services:
         print(f"Checking silverkube-{service}")

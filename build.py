@@ -137,19 +137,22 @@ def generate_services() -> List[Path]:
             "--listen-client-urls https://127.0.0.1:2379"]
     ), (
         "kube-apiserver", [
+            "--client-ca-file /var/lib/silverkube/ca.pem",
             "--etcd-cafile /var/lib/silverkube/ca.pem",
             "--etcd-certfile /var/lib/silverkube/etcd-cert.pem",
             "--etcd-keyfile /var/lib/silverkube/etcd-key.pem",
-            "--etcd-servers=https://localhost:2379",
-            "--insecure-bind-address=127.0.0.1",
-            "--insecure-port=8043",
-            "--service-account-key-file=/var/lib/silverkube/cert.pem",
+            "--etcd-servers https://localhost:2379",
+            "--tls-cert-file /var/lib/silverkube/api-cert.pem",
+            "--tls-private-key-file /var/lib/silverkube/api-key.pem",
+            "--bind-address 127.0.0.1",
+            "--secure-port 8043",
+            "--service-account-key-file /var/lib/silverkube/sa-cert.pem",
             "--allow-privileged=true",
             "--v=2"]
     ), (
         "kube-controller-manager", [
             "--master 127.0.0.1:8043",
-            "--service-account-private-key-file=/var/lib/silverkube/key.pem"
+            "--service-account-private-key-file /var/lib/silverkube/sa-key.pem"
         ]
     ), (
         "kube-scheduler", ["--kubeconfig /var/lib/silverkube/kubeconfig"]
@@ -332,7 +335,8 @@ BuildReq = set([
     "glibc-devel", "glibc-static", "go", "gpgme-devel", "libassuan-devel",
     "libgpg-error-devel", "libseccomp-devel", "libselinux-devel", "pkgconfig"])
 
-if __name__ == "__main__":
+
+def main():
     SRC_DIR.mkdir(exist_ok=True, parents=True)
     execute(["dnf", "install", "-y"] + list(BuildReq))
     bins = fetch_kube() + fetch_etcd() + build_crio() + build_conmon()
@@ -424,3 +428,7 @@ if __name__ == "__main__":
     execute(["rpmbuild", "--define", "_sourcedir %s" % SRC_DIR.resolve(),
              "--define", "_topdir %s" % Path('rpmbuild').resolve(),
              "-ba", "silverkube.spec"])
+
+
+if __name__ == "__main__":
+    main()
