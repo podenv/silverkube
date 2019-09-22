@@ -4,8 +4,8 @@ Silverkube - a kubernetes service for desktop
 The goal is to provide a kubernetes service suitable to manage
 a desktop workstation:
 
-* Minimal services to be started early
-* Basic auth enough to let a container starts more container
+* Minimal services to be started early.
+* Basic auth enough to let a container starts more containers.
 
 This process is pretty much an experimental work in progress,
 use at your own risk.
@@ -18,26 +18,26 @@ On a fedora-30 server virtual machine:
 * Prepare the host
 
 ```shell
-dnf install -y buildah podman
+$ sudo dnf install -y buildah podman
 # umount tmp if instance has less than 1GB for buildah
-umount /tmp
+$ sudo umount /tmp
 ```
 
 * Build and install the service
 
 ```shell
-mkdir -p ~/.cache/silverkube-sources
-podman run --rm -it \
+$ mkdir -p ~/.cache/silverkube-sources
+$ podman run --rm -it \
   -v $HOME/.cache/silverkube-sources:/root/.cache/silverkube-sources:Z \
   -v $(pwd):/data:Z --workdir /data \
   registry.fedoraproject.org/fedora:30 python3 build.py
-dnf install -y rpmbuild/RPMS/x86_64/silverkube*.rpm
+$ sudo dnf install -y ./rpmbuild/RPMS/x86_64/silverkube*.rpm
 ```
 
 * Build the silverkube image
 
 ```shell
-buildah bud -f Containerfile -t silverkube .
+$ buildah bud -f Containerfile -t silverkube .
 ```
 
 Usage
@@ -46,8 +46,8 @@ Usage
 * Start the services
 
 ```shell
-# mount /tmp
-# silverkube start
+$ sudo mount /tmp
+$ sudo silverkube start
 Checking silverkube-etcd
 active
 Checking silverkube-kube-apiserver
@@ -61,7 +61,10 @@ active
 Checking silverkube-kubelet
 active
 up!
-export KUBECONFIG=/var/lib/silverkube/kubeconfig
+Creating namespace
+namespace/fedora unchanged
+serviceaccount/fedora configured
+export KUBECONFIG=/var/lib/silverkube/kubeconfig.user
 ```
 
 * Start the desktop
@@ -109,6 +112,5 @@ down!
 Roadmap
 -------
 
-* create restricted service account
 * implement a tool to start applications from the desktop environment
-* add security context to prevent privileged pod
+* add security context to prevent privilege escallation

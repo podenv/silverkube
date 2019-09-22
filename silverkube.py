@@ -16,7 +16,7 @@
 """A script to start the services
 """
 
-from base64 import b64encode
+from base64 import b64encode, b64decode
 from os import environ
 from subprocess import Popen, PIPE
 from time import sleep
@@ -160,7 +160,57 @@ def up() -> int:
             else:
                 raise RuntimeError(f"Fail to check {service}")
     print("up!")
-    print(f"export KUBECONFIG={kube_config}")
+
+    print("Creating namespace")
+    kube_user = Path("/var/lib/silverkube/user.yaml")
+    kube_user.write_text(dedent("""
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: fedora
+        ---
+        apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: fedora
+          namespace: fedora
+        secrets:
+          - name: fedora-token
+    """[1:]))
+    execute(["kubectl", "apply", "-f", str(kube_user)])
+    for retry in range(3):
+        token = b64decode(pread([
+            "kubectl", "-n", "fedora", "get", "secrets", "-o",
+            "jsonpath={.items[?(@.metadata.annotations"
+            "['kubernetes\\.io/service-account\\.name']=='fedora')]"
+            ".data.token}"
+        ])[0].encode('utf-8')).decode('utf-8')
+        if token:
+            break
+        sleep(5)
+    kube_config_user = Path("/var/lib/silverkube/kubeconfig.user")
+    kube_config_user.write_text(dedent("""
+        apiVersion: v1
+        kind: Config
+        preferences: {}
+        clusters:
+        - cluster:
+            server: https://localhost:8043
+            certificate-authority-data: %s
+          name: local
+        users:
+        - name: fedora
+          user:
+            token: %s
+        contexts:
+        - context:
+            cluster: local
+            user: fedora
+            namespace: fedora
+          name: local
+        current-context: local
+    """)[1:] % (ca, token))
+    print(f"export KUBECONFIG={kube_config_user}")
     return 0
 
 
