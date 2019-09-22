@@ -1,0 +1,129 @@
+# Doc: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.16/
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pulse-socket
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 1Ki
+  accessModes:
+    - ReadWriteOnce #type of access
+  hostPath:
+    path: "/run/user/1000/silverkube/pulse" #host location
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: xorg-socket
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 1Ki
+  accessModes:
+    - ReadWriteOnce #type of access
+  hostPath:
+    path: "/run/user/1000/silverkube/xorg" #host location
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pulse-socket
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Ki
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: xorg-socket
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Ki
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: display-server
+spec:
+  volumes:
+    - name: xorg-socket
+      persistentVolumeClaim:
+        claimName: xorg-socket
+    - name: tty
+      hostPath:
+        path: /dev/tty0
+    - name: dri
+      hostPath:
+        path: /dev/dri
+    - name: input
+      hostPath:
+        path: /dev/input
+    - name: vga
+      hostPath:
+        path: /dev/vga_arbriter
+    - name: udev
+      hostPath:
+        path: /run/udev
+  restartPolicy: Never
+  containers:
+    - name: xorg
+      image: localhost/silverkube
+      imagePullPolicy: Never
+      stdin: true
+      tty: true
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - mountPath: "/tmp/.X11-unix"
+          name: xorg-socket
+        - mountPath: "/dev/tty0"
+          name: tty
+        - mountPath: "/dev/dri"
+          name: dri
+        - mountPath: "/dev/input"
+          name: input
+        - mountPath: "/dev/vga_arbriter"
+          name: vga
+        - mountPath: "/run/udev"
+          name: udev
+      command: ["/bin/Xorg", "vt1", "-keeptty"]
+
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: window-manager
+spec:
+  volumes:
+    - name: xorg-socket
+      persistentVolumeClaim:
+        claimName: xorg-socket
+  restartPolicy: Never
+  containers:
+    - name: xmonad
+      image: localhost/silverkube
+      imagePullPolicy: Never
+      stdin: true
+      tty: true
+      env:
+        - name: DISPLAY
+          value: ":0"
+      volumeMounts:
+        - mountPath: "/tmp/.X11-unix"
+          name: xorg-socket
+      command: ["/bin/xmonad"]

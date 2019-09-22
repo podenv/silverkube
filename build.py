@@ -13,6 +13,9 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+"""A script to fetch the required program and assemble a RPM package
+"""
+
 from os import listdir
 from subprocess import Popen
 from typing import Tuple, List

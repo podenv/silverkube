@@ -13,6 +13,9 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+"""A script to start the services
+"""
+
 from os import environ
 from subprocess import Popen, PIPE
 from time import sleep
@@ -89,12 +92,13 @@ def up() -> int:
         execute(["systemctl", "start", f"silverkube-{service}"])
         execute(["systemctl", "is-active", f"silverkube-{service}"])
         if check:
+            sleep(3)
             for retry in range(3):
                 res = pread(check[0].split())
                 if check[1] in res[0]:
                     break
                 print(res)
-                sleep(1)
+                sleep(5)
             else:
                 raise RuntimeError(f"Fail to check {service}")
     print("up!")
