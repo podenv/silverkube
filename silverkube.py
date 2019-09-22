@@ -114,6 +114,8 @@ def generate_certs() -> None:
     generate_cert("etcd")
     generate_cert("sa")
     generate_cert("api")
+    generate_cert("controller")
+    generate_cert("crio")
     return (dest / "ca.pem").read_text()
 
 

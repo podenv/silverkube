@@ -151,8 +151,16 @@ def generate_services() -> List[Path]:
             "--v=2"]
     ), (
         "kube-controller-manager", [
-            "--master 127.0.0.1:8043",
-            "--service-account-private-key-file /var/lib/silverkube/sa-key.pem"
+            "--bind-address 127.0.0.1",
+            "--cluster-signing-cert-file /var/lib/silverkube/ca.pem",
+            "--cluster-signing-key-file /var/lib/silverkube/cakey.pem",
+            "--kubeconfig /var/lib/silverkube/kubeconfig",
+            "--tls-cert-file /var/lib/silverkube/controller-cert.pem",
+            "--tls-private-key-file /var/lib/silverkube/controller-key.pem",
+            "--service-account-private-key-file /var/lib/silverkube/sa-key.pem",
+            "--root-ca-file /var/lib/silverkube/ca.pem",
+            "--leader-elect=true",
+            "--use-service-account-credentials=true"
         ]
     ), (
         "kube-scheduler", ["--kubeconfig /var/lib/silverkube/kubeconfig"]
@@ -200,9 +208,9 @@ def generate_conf() -> List[Path]:
         stream_address = "127.0.0.1"
         stream_port = "0"
         stream_enable_tls = false
-        stream_tls_cert = ""
-        stream_tls_key = ""
-        stream_tls_ca = ""
+        stream_tls_cert = "/var/lib/silverkube/crio-cert.pem"
+        stream_tls_key = "/var/lib/silverkube/crio-key.pem"
+        stream_tls_ca = "/var/lib/silverkube/ca.pem"
         grpc_max_send_msg_size = 16777216
         grpc_max_recv_msg_size = 16777216
         [crio.runtime]
@@ -215,7 +223,6 @@ def generate_conf() -> List[Path]:
         ]
         selinux = true
         seccomp_profile = ""
-        apparmor_profile = "crio-default-1.15.1-dev"
         cgroup_manager = "cgroupfs"
         default_capabilities = [
                 "CHOWN",
@@ -246,8 +253,6 @@ def generate_conf() -> List[Path]:
         bind_mount_prefix = ""
         read_only = false
         log_level = "info"
-        uid_mappings = ""
-        gid_mappings = ""
         ctr_stop_timeout = 0
         manage_network_ns_lifecycle = false
         [crio.runtime.runtimes.runc]
