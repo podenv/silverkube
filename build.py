@@ -127,10 +127,20 @@ def build_cni() -> List[Path]:
 def generate_services() -> List[Path]:
     services: List[Path] = []
     for name, args in [(
-        "etcd", ["--name silverkube"]
+        "etcd", [
+            "--name silverkube", "--data-dir /var/lib/silverkube/etcd",
+            "--key-file=/var/lib/silverkube/etcd-key.pem",
+            "--cert-file /var/lib/silverkube/etcd-cert.pem",
+            "--client-cert-auth",
+            "--trusted-ca-file=/var/lib/silverkube/ca.pem",
+            "--advertise-client-urls https://127.0.0.1:2379",
+            "--listen-client-urls https://127.0.0.1:2379"]
     ), (
         "kube-apiserver", [
-            "--etcd-servers=http://localhost:2379",
+            "--etcd-cafile /var/lib/silverkube/ca.pem",
+            "--etcd-certfile /var/lib/silverkube/etcd-cert.pem",
+            "--etcd-keyfile /var/lib/silverkube/etcd-key.pem",
+            "--etcd-servers=https://localhost:2379",
             "--insecure-bind-address=127.0.0.1",
             "--insecure-port=8043",
             "--service-account-key-file=/var/lib/silverkube/cert.pem",

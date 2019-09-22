@@ -24,6 +24,11 @@ from sys import argv
 from pathlib import Path
 from textwrap import dedent
 
+etcd_ca = (
+    "--cacert /var/lib/silverkube/ca.pem "
+    "-E /var/lib/silverkube/etcd-cert.pem "
+    "--key /var/lib/silverkube/etcd-key.pem")
+
 # Types
 ServiceName = str
 Command = str
@@ -31,7 +36,7 @@ ExpectedOutput = str
 Check = Tuple[Command, ExpectedOutput]
 Service = Tuple[ServiceName, Check]
 Services: List[Service] = [
-    ("etcd", ("curl http://localhost:2379/version", "etcdcluster")),
+    ("etcd", (f"curl {etcd_ca} https://localhost:2379/version", "etcdcluster")),
     ("kube-apiserver", ("curl http://localhost:8043/api", "APIVersions")),
     ("kube-controller-manager", None),
     ("kube-scheduler", ("kubectl get componentstatuses", "Healthy")),
@@ -39,6 +44,7 @@ Services: List[Service] = [
               "version", "RuntimeName:  cri-o")),
     ("kubelet", ("kubectl get nodes", "Ready")),
 ]
+dest = Path("/var/lib/silverkube")
 
 
 # Utility procedures
@@ -53,21 +59,54 @@ def pread(args: List[str]) -> str:
     return stdout.decode('utf-8'), stderr.decode('utf-8')
 
 
-def generate_cert() -> None:
-    dest = Path("/var/lib/silverkube")
-    if not (dest / "key.pem").exists():
+def generate_cert(name) -> None:
+    key = (dest / (name + "-key.pem"))
+    req = (dest / (name + "-cert.req"))
+    crt = (dest / (name + "-cert.pem"))
+    if not key.exists():
         execute(
-            ["openssl", "genrsa", "-out", str(dest / "key.pem"), "2048"])
-    if not (dest / "cert.pem").exists():
+            ["openssl", "genrsa", "-out", str(key), "2048"])
+    if not req.exists():
         execute(
-            ["openssl", "req", "-new", "-x509", "-days", "365",
-             "-subj", "/C=FR/O=K1S/CN=localhost",
-             "-key", str(dest / "key.pem"),
-             "-out", str(dest / "cert.pem")])
+            ["openssl", "req", "-new", "-subj",
+             "/C=FR/O=SoftwareFactory/CN=localhost",
+             "-extensions", "v3_req", "-config", str(dest / "ca.cnf"),
+             "-key", str(key), "-out", str(req)])
+    if not crt.exists():
+        execute(
+            ["openssl", "x509", "-req", "-days", "365", "-sha256",
+             "-extensions", "v3_req", "-extfile", str(dest / "ca.cnf"),
+             "-CA", str(dest / "ca.pem"), "-CAkey", str(dest / "cakey.pem"),
+             "-CAserial", str(dest / "ca.srl"),
+             "-in", str(req), "-out", str(crt)])
+
+
+def generate_certs() -> None:
+    (dest / "ca.cnf").write_text(dedent("""
+      [req]
+      req_extensions = v3_req
+      distinguished_name = req_distinguished_name
+
+      [ req_distinguished_name ]
+      commonName_default = localhost
+
+      [ v3_req ]
+      subjectAltName=@alt_names
+
+      [alt_names]
+      DNS.1 = localhost
+    """))
+    (dest / "ca.srl").write_text("00\n")
+    if not (dest / "cakey.pem").exists():
+        execute(["openssl", "req", "-nodes", "-days", "3650", "-new",
+                 "-x509", "-subj", "/C=FR/O=SilverKube/OU=42",
+                 "-keyout", str(dest / "cakey.pem"),
+                 "-out", str(dest / "ca.pem")])
+    generate_cert("etcd")
 
 
 def up() -> int:
-    generate_cert()
+    generate_certs()
     kube_config = Path("/var/lib/silverkube/kubeconfig")
     kube_config.write_text(dedent("""
         apiVersion: v1
