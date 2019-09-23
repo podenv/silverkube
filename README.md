@@ -10,6 +10,9 @@ a desktop workstation:
 This process is pretty much an experimental work in progress,
 use at your own risk.
 
+Demo video: [https://youtu.be/w86Dp5D8Xag](https://youtu.be/w86Dp5D8Xag)
+
+
 Setup
 -----
 
@@ -112,5 +115,6 @@ down!
 Roadmap
 -------
 
-* implement a tool to start applications from the desktop environment
-* add security context to prevent privilege escallation
+* implement a tool such as [podenv](https://github.com/podenv/podenv) to start applications from the desktop environment.
+* add security context to prevent privilege escallation.
+* start kube and crio service as unprivileged user.
