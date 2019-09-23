@@ -144,7 +144,7 @@ def generate_services() -> List[Path]:
             "--etcd-servers https://localhost:2379",
             "--tls-cert-file /var/lib/silverkube/api-cert.pem",
             "--tls-private-key-file /var/lib/silverkube/api-key.pem",
-            "--bind-address 127.0.0.1",
+            "--bind-address 0.0.0.0",
             "--secure-port 8043",
             "--service-account-key-file /var/lib/silverkube/sa-cert.pem",
             "--allow-privileged=true",
