@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: xorg-socket
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Ki
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: editor
+spec:
+  volumes:
+    - name: xorg-socket
+      persistentVolumeClaim:
+        claimName: xorg-socket
+  restartPolicy: Never
+  containers:
+    - name: emacs
+      image: localhost/silverkube
+      imagePullPolicy: Never
+      stdin: true
+      tty: true
+      env:
+        - name: DISPLAY
+          value: ":0"
+      volumeMounts:
+        - mountPath: "/tmp/.X11-unix"
+          name: xorg-socket
+      command: ["/bin/emacs"]

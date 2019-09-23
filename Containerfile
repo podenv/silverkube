@@ -8,3 +8,4 @@ RUN dnf install -y acl attr basesystem bash file pciutils which time \
   xorg-x11-drv-qxl xorg-x11-drv-vesa xorg-x11-utils  xorg-x11-xkb-utils \
   xterm xorg-x11-server-Xspice pulseaudio pavucontrol xmonad git \
   kubernetes-client iproute
+COPY tools/* /bin/
