@@ -48,17 +48,17 @@ Usage
 ```shell
 $ sudo mount /tmp
 $ sudo silverkube start
-Checking silverkube-etcd
+Creating silverkube-etcd
 active
-Checking silverkube-kube-apiserver
+Creating silverkube-kube-apiserver
 active
-Checking silverkube-kube-controller-manager
+Creating silverkube-kube-controller-manager
 active
-Checking silverkube-kube-scheduler
+Creating silverkube-kube-scheduler
 active
-Checking silverkube-crio
+Creating silverkube-crio
 active
-Checking silverkube-kubelet
+Creating silverkube-kubelet
 active
 up!
 Creating namespace

@@ -68,6 +68,7 @@ def pread(args: List[str]) -> str:
 def b64(data: str) -> str:
     return b64encode(data.encode('utf-8')).decode('utf-8')
 
+
 def generate_cert(name) -> None:
     key = (dest / (name + "-key.pem"))
     req = (dest / (name + "-cert.req"))
@@ -146,12 +147,12 @@ def up() -> int:
                 b64((dest / "sa-cert.pem").read_text())))
     environ["KUBECONFIG"] = str(kube_config)
     for service, check in Services:
-        print(f"Checking silverkube-{service}")
+        print(f"Starting silverkube-{service}")
         execute(["systemctl", "start", f"silverkube-{service}"])
         execute(["systemctl", "is-active", f"silverkube-{service}"])
         if check:
             sleep(3)
-            for retry in range(3):
+            for retry in range(10):
                 res = pread(check[0].split())
                 if check[1] in res[0]:
                     break
