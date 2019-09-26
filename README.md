@@ -29,9 +29,9 @@ $ sudo umount /tmp
 * Build and install the service
 
 ```shell
-$ mkdir -p ~/.cache/silverkube-sources
+$ mkdir -p ~/.cache/silverkube
 $ podman run --rm -it \
-  -v $HOME/.cache/silverkube-sources:/root/.cache/silverkube-sources:Z \
+  -v $HOME/.cache/silverkube:/root/.cache/silverkube:Z \
   -v $(pwd):/data:Z --workdir /data \
   registry.fedoraproject.org/fedora:30 python3 build.py
 $ sudo dnf install -y ./rpmbuild/RPMS/x86_64/silverkube*.rpm
@@ -40,7 +40,9 @@ $ sudo dnf install -y ./rpmbuild/RPMS/x86_64/silverkube*.rpm
 * Build the silverkube image
 
 ```shell
-$ buildah bud -f Containerfile -t silverkube .
+# Use vfs-storage for rootless crio
+$ buildah --storage-driver vfs --root $HOME/.local/share/silverkube/storage/ \
+    --runroot /tmp/1000  bud -f Containerfile -t silverkube desktop
 ```
 
 Usage
@@ -50,24 +52,32 @@ Usage
 
 ```shell
 $ sudo mount /tmp
-$ sudo silverkube start
-Creating silverkube-etcd
+$ silverkube start
+Starting silverkube-rootlesskit
+Starting silverkube-crio
+Starting silverkube-etcd
+Starting silverkube-kube-apiserver
+Starting silverkube-kube-controller-manager
+Starting silverkube-kube-scheduler
+Starting silverkube-kubelet
+Checking silverkube-rootlesskit
 active
-Creating silverkube-kube-apiserver
+Checking silverkube-crio
 active
-Creating silverkube-kube-controller-manager
+Checking silverkube-etcd
 active
-Creating silverkube-kube-scheduler
+Checking silverkube-kube-apiserver
 active
-Creating silverkube-crio
+Checking silverkube-kube-controller-manager
 active
-Creating silverkube-kubelet
+Checking silverkube-kube-scheduler
+active
+Checking silverkube-kubelet
 active
 up!
-Creating namespace
-namespace/fedora unchanged
-serviceaccount/fedora configured
-export KUBECONFIG=/var/lib/silverkube/kubeconfig.user
+namespace/fedora created
+serviceaccount/fedora created
+alias kubectl='/home/fedora/.local/bin/rootless-join kubectl --config /home/fedora/.config/silverkube/kubeconfig.user'
 ```
 
 * Start the desktop

@@ -72,9 +72,6 @@ spec:
     - name: input
       hostPath:
         path: /dev/input
-    - name: vga
-      hostPath:
-        path: /dev/vga_arbriter
     - name: udev
       hostPath:
         path: /run/udev
@@ -86,7 +83,9 @@ spec:
       stdin: true
       tty: true
       securityContext:
-        privileged: true
+        # privileged: true
+        runAsUser: 1000
+        runAsGroup: 1000
       volumeMounts:
         - mountPath: "/tmp/.X11-unix"
           name: xorg-socket
@@ -96,34 +95,32 @@ spec:
           name: dri
         - mountPath: "/dev/input"
           name: input
-        - mountPath: "/dev/vga_arbriter"
-          name: vga
         - mountPath: "/run/udev"
           name: udev
       command: ["/bin/Xorg", "vt1", "-keeptty"]
 
 
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: window-manager
-spec:
-  volumes:
-    - name: xorg-socket
-      persistentVolumeClaim:
-        claimName: xorg-socket
-  restartPolicy: Never
-  containers:
-    - name: xmonad
-      image: localhost/silverkube
-      imagePullPolicy: Never
-      stdin: true
-      tty: true
-      env:
-        - name: DISPLAY
-          value: ":0"
-      volumeMounts:
-        - mountPath: "/tmp/.X11-unix"
-          name: xorg-socket
-      command: ["/bin/xmonad"]
+# ---
+# apiVersion: v1
+# kind: Pod
+# metadata:
+#   name: window-manager
+# spec:
+#   volumes:
+#     - name: xorg-socket
+#       persistentVolumeClaim:
+#         claimName: xorg-socket
+#   restartPolicy: Never
+#   containers:
+#     - name: xmonad
+#       image: localhost/silverkube
+#       imagePullPolicy: Never
+#       stdin: true
+#       tty: true
+#       env:
+#         - name: DISPLAY
+#           value: ":0"
+#       volumeMounts:
+#         - mountPath: "/tmp/.X11-unix"
+#           name: xorg-socket
+#       command: ["/bin/xmonad"]
