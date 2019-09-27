@@ -17,6 +17,7 @@
 """
 
 from base64 import b64encode, b64decode
+from json import dumps as json_dumps
 from os import environ, getuid
 from subprocess import Popen, PIPE
 from time import sleep
@@ -291,10 +292,20 @@ def generate_kubeconfig(ca: str):
       authentication:
         anonymous:
           enabled: true
+        webhook:
+          enabled: true
+        x509:
+          clientCAFile: "%s"
+      tlsCertFile: "%s"
+      tlsPrivateKeyFile: "%s"
+      authorization:
+        mode: Webhook
       clusterDomain: "silverkube"
       resolvConf: "/etc/resolv.conf"
       ImageMinimumGCAge: 100000m
-    """)[1:])
+    """)[1:] % (str(PKI / "ca.pem"),
+                str(PKI / "kubelet-cert.pem"),
+                str(PKI / "kubelet-key.pem")))
 
     (CONF / "net.d").mkdir(exist_ok=True)
     (CONF / "net.d" / "bridge.conflist").write_text(dedent("""
@@ -324,6 +335,116 @@ def generate_kubeconfig(ca: str):
             ]
         }
     """)[1:])
+
+
+def generate_policy():
+    (CONF / "abac.json").write_text("\n".join(map(
+        json_dumps, [
+            dict(apiVersion="abac.authorization.kubernetes.io/v1beta1",
+                 kind="Policy",
+                 spec=dict(user="localhost",
+                           namespace="*",
+                           resource="*",
+                           apiGroup="*"))])))
+    pvs = "\n".join(map(lambda pv: dedent("""
+        ---
+        apiVersion: v1
+        kind: PersistentVolume
+        metadata:
+          name: {name}
+        spec:
+          storageClassName: manual
+          capacity:
+            storage: 1Ki
+          accessModes:
+            - ReadWriteOnce
+          hostPath:
+            path: "/tmp/silverkube/{name}"
+    """)[1:].format(**pv), [dict(name="xorg")]))
+    (CONF / "policy.yaml").write_text(dedent("""
+        apiVersion: policy/v1beta1
+        kind: PodSecurityPolicy
+        metadata:
+          name: silverkube-psp
+        spec:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          volumes:
+            - 'configMap'
+            - 'emptyDir'
+            - 'secret'
+            - 'persistentVolumeClaim'
+          allowedHostPaths:
+            - pathPrefix: '/dev/dri'
+            - pathPrefix: '/dev/snd'
+            - pathPrefix: '/dev/tty0'
+            - pathPrefix: '/run/silverkube'
+            - pathPrefix: '/var/db/silverkube'
+          hostNetwork: false
+          hostIPC: false
+          hostPID: false
+          runAsUser:
+            rule: MustRunAs
+            ranges:
+              - min: 1000
+                max: 1000
+          runAsGroup:
+            rule: MustRunAs
+            ranges:
+              - min: 1000
+                max: 1000
+          supplementalGroups:
+            rule: MustRunAs
+            ranges:
+              - min: 1000
+                max: 1000
+          fsGroup:
+            rule: MustRunAs
+            ranges:
+              - min: 1000
+                max: 1000
+          seLinux:
+            rule: MustRunAs
+            seLinuxOptions:
+              type: silverkube_t
+
+        ---
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: silverkube
+
+        ---
+        kind: Role
+        apiVersion: rbac.authorization.k8s.io/v1beta1
+        metadata:
+          namespace: silverkube
+          name: silverkube-role
+        rules:
+        - apiGroups: [""]
+          resources: ["pods", "pods/exec", "pods/log", "configmaps", "secrets"]
+          verbs: ["*"]
+        - apiGroups: [""]
+          resources: ["persistentvolumeclaims"]
+          verbs: ["*"]
+
+        ---
+        kind: RoleBinding
+        apiVersion: rbac.authorization.k8s.io/v1beta1
+        metadata:
+          name: silverkube-rolebinding
+          namespace: silverkube
+        subjects:
+        - kind: ServiceAccount
+          name: default
+        - kind: User
+          name: 'system:serviceaccount:silverkube:default'
+        roleRef:
+          kind: Role
+          name: silverkube-role
+          apiGroup: "rbac.authorization.k8s.io"
+    """)[1:] + pvs)
 
 
 def generate_rootless_scripts() -> None:
@@ -397,36 +518,20 @@ def setup_service(name: str, args: List[str]) -> None:
         """)[1:])
 
 
-def create_service_account(ca) -> None:
-    kube_user = CONF / "user.yaml"
-    kube_user.write_text(dedent("""
-        ---
-        apiVersion: v1
-        kind: Namespace
-        metadata:
-          name: fedora
-
-        ---
-        apiVersion: v1
-        kind: ServiceAccount
-        metadata:
-          name: fedora
-          namespace: fedora
-        automountServiceAccountToken: false
-        secrets:
-          - name: fedora-token
-    """[1:]))
-    execute(NSJOIN + ["kubectl", "apply", "-f", str(kube_user)])
+def generate_user_kubeconfig(ca) -> None:
+    execute(NSJOIN + ["kubectl", "apply", "-f", str(CONF / "policy.yaml")])
     for retry in range(3):
         token = b64decode(pread(NSJOIN + [
-            "kubectl", "-n", "fedora", "get", "secrets", "-o",
+            "kubectl", "-n", "silverkube", "get", "secrets", "-o",
             "jsonpath={.items[?(@.metadata.annotations"
-            "['kubernetes\\.io/service-account\\.name']=='fedora')]"
+            "['kubernetes\\.io/service-account\\.name']=='default')]"
             ".data.token}"
         ])[0].encode('utf-8')).decode('utf-8')
         if token:
             break
         sleep(5)
+    else:
+        raise RuntimeError("Couldn't get service account token")
     if USERNETES:
         kube_config_user = CONF / "kubeconfig.user"
     else:
@@ -442,14 +547,14 @@ def create_service_account(ca) -> None:
             certificate-authority-data: %s
           name: local
         users:
-        - name: fedora
+        - name: silverkube
           user:
             token: %s
         contexts:
         - context:
             cluster: local
-            user: fedora
-            namespace: fedora
+            user: silverkube
+            namespace: silverkube
           name: local
         current-context: local
     """)[1:] % (ca, token))
@@ -462,6 +567,7 @@ def up() -> int:
         generate_rootless_scripts()
     generate_kubeconfig(ca)
     generate_crio_conf()
+    generate_policy()
     setup_service("rootlesskit",
                   [
                       "--state-dir", str(RUN / "rk"),
@@ -497,7 +603,14 @@ def up() -> int:
                       "--bind-address 0.0.0.0",
                       "--secure-port 8043",
                       "--service-account-key-file", str(PKI / "sa-cert.pem"),
-                      "--allow-privileged=true",
+                      "--anonymous-auth=False",
+                      "--authorization-mode=Node,RBAC,ABAC",
+                      "--authorization-policy-file", str(CONF / "abac.json"),
+                      "--kubelet-client-certificate",
+                      str(PKI / "kubelet-cert.pem"),
+                      "--kubelet-client-key",
+                      str(PKI / "kubelet-key.pem"),
+#                      "--allow-privileged=true",
                       "--service-cluster-ip-range 127.0.0.1/24",
                   ])
     setup_service("kube-controller-manager",
@@ -528,6 +641,8 @@ def up() -> int:
                       "--cni-conf-dir", str(CONF / "net.d"),
                       "--tls-cert-file", str(PKI / "kubelet-cert.pem"),
                       "--tls-private-key-file", str(PKI / "kubelet-key.pem"),
+                      "--anonymous-auth=false",
+                      "--client-ca-file", str(PKI / "ca.pem"),
                       "--container-runtime=remote",
                       "--container-runtime-endpoint", str(CRIOSOCK),
                       "--kubeconfig", str(KUBECONFIG),
@@ -546,12 +661,13 @@ def up() -> int:
                 res = pread(NSJOIN + check[0].split())
                 if check[1] in res[0]:
                     break
-                print(res)
-                sleep(5)
+                print(".", end='')
+                sleep(2)
             else:
+                print(res)
                 raise RuntimeError(f"Fail to check {service}")
     print("up!")
-    kube_config_user = create_service_account(ca)
+    kube_config_user = generate_user_kubeconfig(ca)
     if USERNETES:
         kubectl = f'{RKJOIN} kubectl'
     else:
@@ -562,7 +678,7 @@ def up() -> int:
 
 def down() -> int:
     try:
-        execute(SYSTEMCTL + ["kill", "-s", "SIGKILL", "silverkube-crio"])
+        execute(SYSTEMCTL + ["kill", "silverkube-crio"])
     except RuntimeError:
         pass
     for service, _ in reversed(Services):
