@@ -27,6 +27,7 @@ from glob import glob
 
 BASE_DIR = Path("~/.cache/silverkube").expanduser()
 SRC_DIR = BASE_DIR / "src"
+SOURCES_DIR = BASE_DIR / "SOURCES"
 BIN_DIR = BASE_DIR / "bin"
 
 environ["GOPATH"] = str(BASE_DIR)
@@ -75,10 +76,10 @@ def clone(url: str, commit: str) -> Path:
 
 def build_rootless() -> List[Path]:
     print("Building rootlesskit")
-    rkit = BIN_DIR / "rootlesskit"
-    rctl = BIN_DIR / "rootlessctl"
     git = clone("https://github.com/rootless-containers/rootlesskit",
                 ROOTLESSKIT_COMMIT)
+    rkit = git / "rootlesskit"
+    rctl = git / "rootlessctl"
     if not rkit.exists():
         execute(["env", "CGO_ENABLED=0", "go", "build", "-o", str(rkit),
                  "github.com/rootless-containers/rootlesskit/cmd/rootlesskit"],
@@ -92,36 +93,33 @@ def build_rootless() -> List[Path]:
 
 def build_slirp() -> List[Path]:
     print("Building slirp4netns")
-    slirp = BIN_DIR / "slirp4netns"
+    git = clone("https://github.com/rootless-containers/slirp4netns",
+                SLIRP4NETNS_COMMIT)
+    slirp = git / "slirp4netns"
     if not slirp.exists():
-        git = clone("https://github.com/rootless-containers/slirp4netns",
-                    SLIRP4NETNS_COMMIT)
         execute(["./autogen.sh"], git)
         execute(["./configure"], git)
         execute(["make"], git)
-        execute(["cp", "slirp4netns", str(slirp)], git)
     return [slirp]
 
 
 def build_runc() -> List[Path]:
     print("Building runc")
-    runc = BIN_DIR / "runc"
+    git = clone("https://github.com/opencontainers/runc",
+                RUNC_COMMIT)
+    runc = git / "runc"
     if not runc.exists():
-        git = clone("https://github.com/opencontainers/runc",
-                    RUNC_COMMIT)
         execute(["make", "BUILDTAGS=seccomp selinux"], git)
-        execute(["cp", "runc", str(runc)], git)
     return [runc]
 
 
 def build_crio() -> List[Path]:
     print("Building crio")
-    crio = BIN_DIR / "crio"
+    git = clone("https://github.com/cri-o/cri-o", CRIO_COMMIT)
+    crio = git / "bin" / "crio"
     crictl = BIN_DIR / "crictl"
     if not crio.exists():
-        git = clone("https://github.com/cri-o/cri-o", CRIO_COMMIT)
         execute(["make", "bin/crio"], git)
-        execute(["cp", "bin/crio", str(BIN_DIR)], git)
     if not crictl.exists():
         execute(["go", "get",
                  "github.com/kubernetes-sigs/cri-tools/cmd/crictl"])
@@ -130,12 +128,11 @@ def build_crio() -> List[Path]:
 
 def build_conmon() -> List[Path]:
     print("Building conmon")
-    conmon = BIN_DIR / "conmon"
+    git = clone("https://github.com/containers/conmon",
+                CONMON_RELEASE)
+    conmon = git / "bin" / "conmon"
     if not conmon.exists():
-        git = clone("https://github.com/containers/conmon",
-                    CONMON_RELEASE)
         execute(["make"], git)
-        execute(["cp", "bin/conmon", str(BIN_DIR)], git)
     return [conmon]
 
 
@@ -157,10 +154,10 @@ def build_kube() -> List[Path]:
                  f"https://github.com/bazelbuild/bazel/releases/download/"
                  f"{BAZEL_RELEASE}/bazel-{BAZEL_RELEASE}-linux-x86_64"])
         bazel.chmod(0o755)
-    kube = BIN_DIR / "hyperkube"
+    git = clone("https://github.com/kubernetes/kubernetes",
+                KUBERNETES_COMMIT)
+    kube = git / "bazel-bin" / "cmd" / "hyperkube" / "hyperkube"
     if not kube.exists():
-        git = clone("https://github.com/kubernetes/kubernetes",
-                    KUBERNETES_COMMIT)
         execute(["git", "config", "user.email", "nobody@example.com"], git)
         execute(["git", "config", "user.name", "Silverkube Build Script"], git)
         patches = clone("https://github.com/rootless-containers/usernetes",
@@ -170,7 +167,6 @@ def build_kube() -> List[Path]:
         execute(["git", "show", "--summary"], git)
         execute(["env", "KUBE_GIT_VERSION=" + KUBE_GIT_VERSION,
                  "bazel", "build", "cmd/hyperkube"], git)
-        execute(["cp", "bazel-bin/cmd/hyperkube/hyperkube", str(kube)], git)
     return [kube]
 
 
