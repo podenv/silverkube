@@ -18,7 +18,7 @@
 
 from base64 import b64encode, b64decode
 from json import dumps as json_dumps
-from os import environ, getuid
+from os import environ, getuid, chown
 from subprocess import Popen, PIPE
 from time import sleep
 from typing import List, Tuple
@@ -91,6 +91,12 @@ Services: List[Service] = [
     ("kube-controller-manager", None),
     ("kube-scheduler", ("kubectl get componentstatuses", "Healthy")),
     ("kubelet", ("kubectl get nodes", "Ready")),
+]
+HostPaths = [
+    dict(name="xorg"),
+    dict(name="wayland"),
+    dict(name="dbus"),
+    dict(name="pulseaudio"),
 ]
 
 
@@ -346,21 +352,6 @@ def generate_policy():
                            namespace="*",
                            resource="*",
                            apiGroup="*"))])))
-    pvs = "\n".join(map(lambda pv: dedent("""
-        ---
-        apiVersion: v1
-        kind: PersistentVolume
-        metadata:
-          name: {name}
-        spec:
-          storageClassName: manual
-          capacity:
-            storage: 1Ki
-          accessModes:
-            - ReadWriteOnce
-          hostPath:
-            path: "/tmp/silverkube/{name}"
-    """)[1:].format(**pv), [dict(name="xorg")]))
     (CONF / "policy.yaml").write_text(dedent("""
         apiVersion: policy/v1beta1
         kind: PodSecurityPolicy
@@ -374,13 +365,12 @@ def generate_policy():
             - 'configMap'
             - 'emptyDir'
             - 'secret'
-            - 'persistentVolumeClaim'
           allowedHostPaths:
             - pathPrefix: '/dev/dri'
             - pathPrefix: '/dev/snd'
             - pathPrefix: '/dev/tty0'
-            - pathPrefix: '/run/silverkube'
-            - pathPrefix: '/var/db/silverkube'
+            - pathPrefix: '/tmp/.silverkube'
+            - pathPrefix: '/home/fedora'
           hostNetwork: false
           hostIPC: false
           hostPID: false
@@ -428,9 +418,6 @@ def generate_policy():
         - apiGroups: [""]
           resources: ["pods", "pods/exec", "pods/log", "configmaps", "secrets"]
           verbs: ["*"]
-        - apiGroups: [""]
-          resources: ["persistentvolumeclaims"]
-          verbs: ["*"]
 
         ---
         kind: RoleBinding
@@ -447,7 +434,7 @@ def generate_policy():
           kind: Role
           name: silverkube-role
           apiGroup: "rbac.authorization.k8s.io"
-    """)[1:] + pvs)
+    """)[1:])
 
 
 def generate_rootless_scripts() -> None:
@@ -523,7 +510,8 @@ def setup_service(name: str, args: List[str]) -> None:
 
 def generate_user_kubeconfig(ca) -> None:
     execute(NSJOIN + ["kubectl", "apply", "-f", str(CONF / "policy.yaml")])
-    for retry in range(3):
+    print("Waiting for service account token")
+    for retry in range(10):
         token = b64decode(pread(NSJOIN + [
             "kubectl", "-n", "silverkube", "get", "secrets", "-o",
             "jsonpath={.items[?(@.metadata.annotations"
@@ -532,7 +520,7 @@ def generate_user_kubeconfig(ca) -> None:
         ])[0].encode('utf-8')).decode('utf-8')
         if token:
             break
-        sleep(5)
+        sleep(1)
     else:
         raise RuntimeError("Couldn't get service account token")
     if USERNETES:
@@ -564,10 +552,36 @@ def generate_user_kubeconfig(ca) -> None:
     return kube_config_user
 
 
+def generate_systemd_conf():
+    Path(
+        "/etc/systemd/system.conf.d/kubelet-cgroups.conf").write_text(dedent("""
+        # Turning on Accounting helps track down performance issues.
+        [Manager]
+        DefaultCPUAccounting=yes
+        DefaultMemoryAccounting=yes
+        DefaultBlockIOAccounting=yes
+    """)[1:])
+
+
+def generate_pvs():
+    base = Path("/tmp/.silverkube")
+    base.mkdir(exist_ok=True)
+    base.chmod(0o700)
+    chown(str(base), 1000, 1000)
+    for pv in HostPaths:
+        path = Path(pv.get('path', base / pv['name']))
+        path.mkdir(parents=True, exist_ok=True)
+        chown(str(path), 1000, 1000)
+        execute(["chcon", "system_u:object_r:container_file_t:s0", str(path)])
+
+
 def up() -> int:
     ca = b64(generate_certs())
     if USERNETES:
         generate_rootless_scripts()
+    else:
+        generate_systemd_conf()
+    generate_pvs()
     generate_kubeconfig(ca)
     generate_crio_conf()
     generate_policy()
