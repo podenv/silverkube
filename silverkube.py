@@ -228,7 +228,16 @@ def generate_crio_conf() -> None:
             "KILL",
     ]
     default_sysctls = []
-    additional_devices = []
+    additional_devices = [
+      "/dev/tty1:/dev/tty1:rwm",
+      "/dev/dri/card0:/dev/dri/card0:rwm",
+      "/dev/input/event0:/dev/input/event0:rwm",
+      "/dev/input/event1:/dev/input/event1:rwm",
+      "/dev/input/event2:/dev/input/event2:rwm",
+      "/dev/input/mice:/dev/input/mice:rwm",
+      "/dev/input/mouse0:/dev/input/mouse0:rwm",
+      "/dev/input/mouse1:/dev/input/mouse1:rwm",
+    ]
     hooks_dir = []
     default_mounts = []
     pids_limit = 1024
@@ -309,6 +318,8 @@ def generate_kubeconfig(ca: str):
       clusterDomain: "silverkube"
       resolvConf: "/etc/resolv.conf"
       ImageMinimumGCAge: 100000m
+      HighThresholdPercent: 100
+      LowThresholdPercent: 0
     """)[1:] % (str(PKI / "ca.pem"),
                 str(PKI / "kubelet-cert.pem"),
                 str(PKI / "kubelet-key.pem")))
@@ -357,6 +368,7 @@ def generate_policy():
         kind: PodSecurityPolicy
         metadata:
           name: silverkube-psp
+          namespace: silverkube
         spec:
           privileged: false
           allowPrivilegeEscalation: false

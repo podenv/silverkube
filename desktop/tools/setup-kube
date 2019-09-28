@@ -31,14 +31,14 @@ clusters:
     insecure-skip-tls-verify: true
   name: local
 users:
-- name: fedora
+- name: default
   user:
     token: %s
 contexts:
 - context:
     cluster: local
-    user: fedora
-    namespace: fedora
+    user: default
+    namespace: silverkube
   name: local
 current-context: local
 """ % (Path("/run/secrets/kubernetes.io/serviceaccount/token").read_text()))
