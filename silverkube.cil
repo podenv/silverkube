@@ -1,0 +1,3 @@
+(block silverkube
+    (blockinherit container)
+    (blockinherit x_container))

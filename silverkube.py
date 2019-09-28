@@ -407,7 +407,10 @@ def generate_policy():
           seLinux:
             rule: MustRunAs
             seLinuxOptions:
-              type: silverkube_t
+              user: system_u
+              role: system_r
+              type: silverkube.process
+              level: s0
 
         ---
         apiVersion: v1

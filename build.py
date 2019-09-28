@@ -193,11 +193,13 @@ BuildReq = set([
     "gcc", "gcc-c++",
     "containers-common", "device-mapper-devel", "git", "glib2-devel",
     "glibc-devel", "go", "gpgme-devel", "libassuan-devel",
-    "libgpg-error-devel", "libseccomp-devel", "libselinux-devel", "pkgconfig"])
+    "libgpg-error-devel", "libseccomp-devel", "libselinux-devel", "pkgconfig",
+    "bzip2", "selinux-policy", "selinux-policy-devel"])
 
 
 def main():
     SRC_DIR.mkdir(exist_ok=True, parents=True)
+    SOURCES_DIR.mkdir(exist_ok=True, parents=True)
     execute(["dnf", "install", "-y"] + list(BuildReq))
     bins = (
         build_rootless() +
@@ -216,13 +218,18 @@ def main():
         "Release: 1%{?dist}",
         "Summary: A kubernetes service for desktop",
         "",
+        "Requires(post): udica",
+        "Requires(post): coreutils",
+        "",
         "License: ASL",
         "URL: https://github.com/podenv/silverkube",
         "",
-        "Source1: silverkube.py"
+        "Source1: silverkube.py",
+        "Source2: silverkube.cil",
     ]
     for idx, source in zip(range(100, 1000), bins + cnis):
-        specfile.append(f"Source{idx}: {source.name}")
+        src_name = str(source).replace('/root/.cache/silverkube/', '')
+        specfile.append(f"Source{idx}: {src_name}")
 
     specfile.extend([
         "",
@@ -235,6 +242,8 @@ def main():
         "",
         "%install",
         "install -p -D -m 0755 %{SOURCE1} %{buildroot}/bin/silverkube",
+        "install -p -D -m 0644 %{SOURCE2} "
+        "%{buildroot}/usr/share/silverkube/silverkube.cil",
         "",
     ])
 
@@ -250,21 +259,28 @@ def main():
                 mode, idx, dest))
 
     specfile.extend([
+        "", "%post",
+        "chcon -v system_u:object_r:container_runtime_exec_t:s0 "
+        "/usr/libexec/silverkube/runc /usr/libexec/silverkube/crio",
+        "semodule -i /usr/share/silverkube/silverkube.cil "
+        "/usr/share/udica/templates/"
+        "{base_container.cil,net_container.cil,x_container.cil}",
         "", "%files",
         "/bin/silverkube",
         "/usr/libexec/silverkube",
+        "/usr/share/silverkube",
         "", "%changelog",
         "* Sat Sep 21 2019 Tristan Cacqueray <tdecacqu@redhat.com>",
         "- Initial packaging"
     ])
     Path("silverkube.spec").write_text("\n".join(specfile))
 
-    for local in bins + cnis + [Path("silverkube.py")]:
-        dest = SRC_DIR / local.name
+    for local in bins + cnis + [Path("silverkube.py"), Path("silverkube.cil")]:
+        dest = SOURCES_DIR / local.name
         if not dest.exists():
             execute(["ln", "-sf", local.resolve(), str(dest)])
 
-    execute(["rpmbuild", "--define", "_sourcedir %s" % SRC_DIR.resolve(),
+    execute(["rpmbuild", "--define", "_sourcedir %s" % SOURCES_DIR.resolve(),
              "--define", "_topdir %s" % Path('rpmbuild').resolve(),
              "-ba", "silverkube.spec"])
 
