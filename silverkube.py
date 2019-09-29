@@ -377,11 +377,13 @@ def generate_policy():
             - 'configMap'
             - 'emptyDir'
             - 'secret'
+            - 'hostPath'
           allowedHostPaths:
             - pathPrefix: '/dev/dri'
             - pathPrefix: '/dev/snd'
             - pathPrefix: '/dev/tty0'
             - pathPrefix: '/tmp/.silverkube'
+            - pathPrefix: '/tmp/.X11-unix'
             - pathPrefix: '/home/fedora'
           hostNetwork: false
           hostIPC: false
@@ -419,6 +421,36 @@ def generate_policy():
         kind: Namespace
         metadata:
           name: silverkube
+
+
+        ---
+        kind: ClusterRole
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: silverkube-psp
+        rules:
+          - apiGroups: ['extensions']
+            resources: ['podsecuritypolicies']
+            verbs:     ['use']
+            resourceNames:
+              - silverkube-psp
+
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: silverkube-psp-binding
+        roleRef:
+          kind: ClusterRole
+          name: silverkube-psp
+          apiGroup: rbac.authorization.k8s.io
+        subjects:
+        - kind: User
+          name: 'system:serviceaccount:silverkube:default'
+        - kind: Group
+          name: system:authenticated # All authenticated users
+          apiGroup: rbac.authorization.k8s.io
 
         ---
         kind: Role
@@ -641,6 +673,8 @@ def up() -> int:
                       str(PKI / "kubelet-key.pem"),
 #                      "--allow-privileged=true",
                       "--service-cluster-ip-range 127.0.0.1/24",
+                      "--enable-admission-plugins ",
+                      "PodSecurityPolicy",
                       f"--v={VERBOSE}",
                   ])
     setup_service("kube-controller-manager",
