@@ -54,13 +54,13 @@ else:
     CONF = Path("/etc/silverkube")
     STORAGE = Path("/var/lib/silverkube") / "storage"
     LOCAL = Path("/var/lib/silverkube") / "local"
-    RUN = Path("/run/user/0/silverkube")
+    RUN = Path("/run/silverkube")
     SYSTEMD = Path("/etc/systemd/system")
     SYSTEMCTL = ["systemctl"]
     NSJOIN = []
     EXTRA_ARGS = dict()
 
-
+VERBOSE = "0"
 LOGS = RUN / "logs"
 PKI = CONF / "pki"
 KUBECONFIG = CONF / "kubeconfig"
@@ -641,6 +641,7 @@ def up() -> int:
                       str(PKI / "kubelet-key.pem"),
 #                      "--allow-privileged=true",
                       "--service-cluster-ip-range 127.0.0.1/24",
+                      f"--v={VERBOSE}",
                   ])
     setup_service("kube-controller-manager",
                   [
@@ -655,11 +656,13 @@ def up() -> int:
                       str(PKI / "sa-key.pem"),
                       "--root-ca-file", str(PKI / "ca.pem"),
                       "--leader-elect=true",
-                      "--use-service-account-credentials=true"
+                      "--use-service-account-credentials=true",
+                      f"--v={VERBOSE}",
                   ])
     setup_service("kube-scheduler",
                   [
-                      "--kubeconfig", str(KUBECONFIG)
+                      "--kubeconfig", str(KUBECONFIG),
+                      f"--v={VERBOSE}",
                   ])
     setup_service("kubelet",
                   [
@@ -675,6 +678,8 @@ def up() -> int:
                       "--container-runtime=remote",
                       "--container-runtime-endpoint", str(CRIOSOCK),
                       "--kubeconfig", str(KUBECONFIG),
+                      "--register-node=true",
+                      f"--v={VERBOSE}",
                   ] + EXTRA_ARGS.get("KUBELET", []))
     execute(SYSTEMCTL + ["daemon-reload"])
     for service, check in Services:
