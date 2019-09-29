@@ -689,7 +689,7 @@ def up() -> int:
                       "--service-account-private-key-file",
                       str(PKI / "sa-key.pem"),
                       "--root-ca-file", str(PKI / "ca.pem"),
-                      "--leader-elect=true",
+                      "--leader-elect=false",
                       "--use-service-account-credentials=true",
                       f"--v={VERBOSE}",
                   ])
