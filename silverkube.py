@@ -230,6 +230,7 @@ def generate_crio_conf() -> None:
     default_sysctls = []
     additional_devices = [
       "/dev/tty1:/dev/tty1:rwm",
+      "/dev/fb0:/dev/fb0:rwm",
       "/dev/dri/card0:/dev/dri/card0:rwm",
       "/dev/input/event0:/dev/input/event0:rwm",
       "/dev/input/event1:/dev/input/event1:rwm",
@@ -367,11 +368,13 @@ def generate_policy():
         apiVersion: policy/v1beta1
         kind: PodSecurityPolicy
         metadata:
-          name: silverkube-psp
+          name: silverkube-psp-privileged
           namespace: silverkube
         spec:
           privileged: false
-          allowPrivilegeEscalation: false
+          allowPrivilegeEscalation: true
+          allowedCapabilities:
+            - CAP_SYS_ADMIN
           readOnlyRootFilesystem: true
           volumes:
             - 'configMap'
@@ -380,11 +383,15 @@ def generate_policy():
             - 'hostPath'
           allowedHostPaths:
             - pathPrefix: '/dev/dri'
+            - pathPrefix: '/dev/fb0'
+            - pathPrefix: '/dev/input'
             - pathPrefix: '/dev/snd'
             - pathPrefix: '/dev/tty0'
+            - pathPrefix: '/dev/tty1'
             - pathPrefix: '/tmp/.silverkube'
             - pathPrefix: '/tmp/.X11-unix'
             - pathPrefix: '/home/fedora'
+            - pathPrefix: '/run/udev'
           hostNetwork: false
           hostIPC: false
           hostPID: false
@@ -401,8 +408,85 @@ def generate_policy():
           supplementalGroups:
             rule: MustRunAs
             ranges:
+              # User
               - min: 1000
                 max: 1000
+              # Video
+              - min: 39
+                max: 39
+              # Audio
+              - min: 63
+                max: 63
+              # Inputs
+              - min: 999
+                max: 999
+          fsGroup:
+            rule: MustRunAs
+            ranges:
+              - min: 1000
+                max: 1000
+          seLinux:
+            rule: MustRunAs
+            seLinuxOptions:
+              user: system_u
+              role: system_r
+              type: silverkube.process
+              level: s0
+
+        ---
+        apiVersion: policy/v1beta1
+        kind: PodSecurityPolicy
+        metadata:
+          name: silverkube-psp
+          namespace: silverkube
+        spec:
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          volumes:
+            - 'configMap'
+            - 'emptyDir'
+            - 'secret'
+            - 'hostPath'
+          allowedHostPaths:
+            - pathPrefix: '/dev/dri'
+            - pathPrefix: '/dev/fb0'
+            - pathPrefix: '/dev/input'
+            - pathPrefix: '/dev/snd'
+            - pathPrefix: '/dev/tty0'
+            - pathPrefix: '/dev/tty1'
+            - pathPrefix: '/tmp/.silverkube'
+            - pathPrefix: '/tmp/.X11-unix'
+            - pathPrefix: '/home/fedora'
+            - pathPrefix: '/run/udev'
+          hostNetwork: false
+          hostIPC: false
+          hostPID: false
+          runAsUser:
+            rule: MustRunAs
+            ranges:
+              - min: 1000
+                max: 1000
+          runAsGroup:
+            rule: MustRunAs
+            ranges:
+              - min: 1000
+                max: 1000
+          supplementalGroups:
+            rule: MustRunAs
+            ranges:
+              # User
+              - min: 1000
+                max: 1000
+              # Video
+              - min: 39
+                max: 39
+              # Audio
+              - min: 63
+                max: 63
+              # Inputs
+              - min: 999
+                max: 999
           fsGroup:
             rule: MustRunAs
             ranges:

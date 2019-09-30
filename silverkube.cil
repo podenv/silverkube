@@ -1,3 +1,7 @@
 (block silverkube
     (blockinherit container)
-    (blockinherit x_container))
+    (blockinherit tty_container)
+    (blockinherit x_container)
+    (allow process tty_device_t (chr_file (ioctl read write getattr lock append open)))
+    (allow process event_device_t (chr_file (read write getattr append open)))
+    (allow process xserver_port_t (tcp_sockept (name_connect read write))))

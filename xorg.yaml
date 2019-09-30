@@ -1,0 +1,62 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: display-server
+spec:
+  volumes:
+    - name: xorg-socket
+      hostPath:
+        path: /tmp/.X11-unix/
+    - name: tty
+      hostPath:
+        path: /dev/tty1
+    - name: dri
+      hostPath:
+        path: /dev/dri
+    - name: input
+      hostPath:
+        path: /dev/input
+    - name: udev
+      hostPath:
+        path: /run/udev
+    - name: tmp
+      emptyDir:
+        medium: Memory
+  securityContext:
+    supplementalGroups:
+      - 39
+      - 63
+      - 999
+  restartPolicy: Never
+  containers:
+    - name: xorg
+      image: localhost/silverkube
+      imagePullPolicy: Never
+      securityContext:
+        privileged: false
+        # Enable xorg setuid wrapper to set drm master
+        allowPrivilegeEscalation: true
+        runAsUser: 1000
+        capabilities:
+          add:
+            - CAP_SYS_ADMIN
+      stdin: true
+      tty: true
+      volumeMounts:
+        - mountPath: "/var/log"
+          name: tmp
+        - mountPath: "/tmp"
+          name: tmp
+        - mountPath: "/tmp/.X11-unix"
+          name: xorg-socket
+        - mountPath: "/dev/tty1"
+          name: tty
+        - mountPath: "/dev/dri"
+          name: dri
+        - mountPath: "/dev/input"
+          name: input
+        - mountPath: "/run/udev"
+          name: udev
+      command: ["/bin/Xorg", "-sharevts", "vt1", "-keeptty"]
+#      command: ["/bin/sleep", "Inf"]

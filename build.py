@@ -263,8 +263,7 @@ def main():
         "chcon -v system_u:object_r:container_runtime_exec_t:s0 "
         "/usr/libexec/silverkube/runc /usr/libexec/silverkube/crio",
         "semodule -i /usr/share/silverkube/silverkube.cil "
-        "/usr/share/udica/templates/"
-        "{base_container.cil,net_container.cil,x_container.cil}",
+        "/usr/share/udica/templates/*.cil",
         "", "%files",
         "/bin/silverkube",
         "/usr/libexec/silverkube",

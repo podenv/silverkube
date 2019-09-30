@@ -1,54 +1,4 @@
 # Doc: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.16/
-
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: display-server
-spec:
-  volumes:
-    - name: xorg-socket
-      hostPath:
-        path: /tmp/.silverkube/xorg
-    - name: tty
-      hostPath:
-        path: /dev/tty1
-    - name: dri
-      hostPath:
-        path: /dev/dri
-    - name: input
-      hostPath:
-        path: /dev/input
-    - name: udev
-      hostPath:
-        path: /run/udev
-  restartPolicy: Never
-  containers:
-    - name: xorg
-      image: localhost/silverkube
-      imagePullPolicy: Never
-      stdin: true
-      tty: true
-      securityContext:
-        # privileged: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        seLinuxOptions:
-          type: silverkube.process
-      volumeMounts:
-        - mountPath: "/tmp/.X11-unix"
-          name: xorg-socket
-        - mountPath: "/dev/tty1"
-          name: tty
-        - mountPath: "/dev/dri"
-          name: dri
-        - mountPath: "/dev/input"
-          name: input
-        - mountPath: "/run/udev"
-          name: udev
-      command: ["/bin/Xorg", "-sharevts", "vt1", "-keeptty"]
-#      command: ["/bin/sleep", "Inf"]
-
 ---
 apiVersion: v1
 kind: Pod
@@ -58,7 +8,7 @@ spec:
   volumes:
     - name: xorg-socket
       hostPath:
-        path: /tmp/.silverkube/xorg
+        path: /tmp/.X11-unix/
   restartPolicy: Never
   containers:
     - name: twm
@@ -66,12 +16,6 @@ spec:
       imagePullPolicy: Never
       stdin: true
       tty: true
-      securityContext:
-        # privileged: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        seLinuxOptions:
-          type: silverkube.process
       env:
         - name: DISPLAY
           value: ":0"

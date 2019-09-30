@@ -126,5 +126,4 @@ Roadmap
 -------
 
 * implement a tool such as [podenv](https://github.com/podenv/podenv) to start applications from the desktop environment.
-* add security context to prevent privilege escallation.
 * start kube and crio service as unprivileged user.
