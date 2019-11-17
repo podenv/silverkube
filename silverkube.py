@@ -746,16 +746,18 @@ def up() -> int:
                       "--secure-port 8043",
                       "--service-account-key-file", str(PKI / "sa-cert.pem"),
                       "--anonymous-auth=False",
-                      "--authorization-mode=Node,RBAC,ABAC",
-                      "--authorization-policy-file", str(CONF / "abac.json"),
+# disable abac for now
+#                      "--authorization-mode=Node,RBAC,ABAC",
+#                      "--authorization-policy-file", str(CONF / "abac.json"),
                       "--kubelet-client-certificate",
                       str(PKI / "kubelet-cert.pem"),
                       "--kubelet-client-key",
                       str(PKI / "kubelet-key.pem"),
 #                      "--allow-privileged=true",
                       "--service-cluster-ip-range 127.0.0.1/24",
-                      "--enable-admission-plugins ",
-                      "PodSecurityPolicy",
+# disable psp for now
+#                      "--enable-admission-plugins ",
+#                      "PodSecurityPolicy",
                       f"--v={VERBOSE}",
                   ])
     setup_service("kube-controller-manager",
@@ -816,7 +818,9 @@ def up() -> int:
                 print(res)
                 raise RuntimeError(f"Fail to check {service}")
     print("up!")
-    kube_config_user = generate_user_kubeconfig(ca)
+# disable psp for now
+    kube_config_user = KUBECONFIG
+#    kube_config_user = generate_user_kubeconfig(ca)
     if USERNETES:
         kubectl = f'{RKJOIN} kubectl'
     else:
