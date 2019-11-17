@@ -31,6 +31,7 @@ USERNETES = getuid() > 0
 if USERNETES:
     # User Paths
     STORAGE = Path("~/.local/share/silverkube/storage").expanduser()
+    CRIO_RUNROOT = Path("~/.local/share/silverkube/runroot").expanduser()
     CONF = Path("~/.config/silverkube").expanduser()
     LOCAL = Path("~/.local/silverkube").expanduser()
     RUN = Path(environ["XDG_RUNTIME_DIR"]) / "silverkube"
@@ -53,6 +54,7 @@ else:
     # Admin Paths
     CONF = Path("/etc/silverkube")
     STORAGE = Path("/var/lib/silverkube") / "storage"
+    CRIO_RUNROOT = Path("/var/lib/silverkube") / "runroot"
     LOCAL = Path("/var/lib/silverkube") / "local"
     RUN = Path("/run/silverkube")
     SYSTEMD = Path("/etc/systemd/system")
@@ -185,14 +187,13 @@ def generate_crio_conf() -> None:
     [crio]
     log_dir = "{LOGS}/crio-pods"
     root = "{STORAGE}"
-    runroot = "{RUN}/crio-root"
+    runroot = "{CRIO_RUNROOT}"
     storage_driver = "vfs"
     storage_option = []
-    version_path = "{RUN}/crio-version"
+    version_file = "{RUN}/crio-version"
 
     [crio.api]
     listen = "{CRIOSOCKPATH}"
-    host_ip = ""
     stream_address = "127.0.0.1"
     stream_port = "0"
     stream_enable_tls = false
@@ -212,7 +213,7 @@ def generate_crio_conf() -> None:
     ]
     selinux = {selinux}
     seccomp_profile = ""
-    apparmor_profile = "crio-default-1.15.1-dev"
+    apparmor_profile = ""
     cgroup_manager = "cgroupfs"
     default_capabilities = [
             "CHOWN",
@@ -326,31 +327,27 @@ def generate_kubeconfig(ca: str):
                 str(PKI / "kubelet-key.pem")))
 
     (CONF / "net.d").mkdir(exist_ok=True)
-    (CONF / "net.d" / "bridge.conflist").write_text(dedent("""
+    (CONF / "net.d" / "loopback.conf").write_text(dedent("""
       {
             "cniVersion": "0.3.0",
-            "name": "podman",
-            "plugins": [
-              {
-                "type": "bridge",
-                "bridge": "sk0",
-                "isGateway": true,
-                "ipMasq": true,
-                "ipam": {
-                    "type": "host-local",
-                    "subnet": "10.43.0.0/16",
-                    "routes": [
-                        { "dst": "0.0.0.0/0" }
-                    ]
-                }
-              },
-              {
-                "type": "portmap",
-                "capabilities": {
-                  "portMappings": true
-                }
-              }
-            ]
+            "type": "loopback"
+      }
+    """)[1:])
+    (CONF / "net.d" / "bridge.conf").write_text(dedent("""
+        {
+            "cniVersion": "0.3.0",
+            "name": "sk0",
+            "type": "bridge",
+            "bridge": "sk0",
+            "isGateway": true,
+            "ipMasq": true,
+            "ipam": {
+                "type": "host-local",
+                "subnet": "10.43.0.0/16",
+                "routes": [
+                    { "dst": "0.0.0.0/0" }
+                ]
+            }
         }
     """)[1:])
 
@@ -840,6 +837,8 @@ def down() -> int:
         except RuntimeError:
             pass
     print("down!")
+    execute(["rm", "-Rf", str(RUN)])
+    execute(["sudo", "rm", "-Rf", str(CRIO_RUNROOT)])
     return 0
 
 

@@ -37,11 +37,11 @@ ROOTLESSKIT_COMMIT = "182be5f88e62f3568b86331356d237910909b24e"
 # 2019-08-30T11:19:53Z
 SLIRP4NETNS_COMMIT = "f9503feb2adcd33ad817f954d294f2076de80f45"
 # 2019-09-18T18:53:36Z
-RUNC_COMMIT = "7507c64ff675606c5ff96b0dd8889a60c589f14d"
+RUNC_COMMIT = "2186cfa3cd52b8e00b1de76db7859cacdf7b1f94"
 # 2019-09-20T19:14:38Z
-CRIO_COMMIT = "f8d13a9055fa836b9f624142de4a5e2f01d6fb26"
+CRIO_COMMIT = "d9c19635885197f8667c9f7e9b9e7c6764b19921"
 # 2019-09-18T15:12:43Z
-CNI_PLUGINS_COMMIT = "291ab6cc849c83882cbe5988c483b334ad1aee36"
+CNI_PLUGINS_COMMIT = "497560f35f2cef2695f1690137b0bba98adf849b"
 # 2019-09-24T20:37:53Z
 KUBERNETES_COMMIT = "948870b5840add1ba4068e3d27d54ea353839992"
 CONMON_RELEASE = "v2.0.1"
@@ -150,10 +150,10 @@ def build_kube() -> List[Path]:
     print("Building kube")
     bazel = Path("/usr/local/bin/bazel")
     if not bazel.exists():
-        execute(["curl", "-Lo", "/usr/local/bin/bazel",
+        execute(["sudo", "curl", "-Lo", "/usr/local/bin/bazel",
                  f"https://github.com/bazelbuild/bazel/releases/download/"
                  f"{BAZEL_RELEASE}/bazel-{BAZEL_RELEASE}-linux-x86_64"])
-        bazel.chmod(0o755)
+        execute(["sudo", "chmod", "+x", str(bazel)])
     git = clone("https://github.com/kubernetes/kubernetes",
                 KUBERNETES_COMMIT)
     kube = git / "bazel-bin" / "cmd" / "hyperkube" / "hyperkube"
@@ -189,7 +189,7 @@ def build_etcd() -> List[Path]:
 
 BuildReq = set([
     "git", "curl", "rpm-build", "make", "btrfs-progs-devel", "which", "runc",
-    "autoconf", "automake", "libtool", "libcap-devel",
+    "autoconf", "automake", "libtool", "libcap-devel", "glibc-static",
     "gcc", "gcc-c++",
     "containers-common", "device-mapper-devel", "git", "glib2-devel",
     "glibc-devel", "go", "gpgme-devel", "libassuan-devel",
@@ -200,7 +200,7 @@ BuildReq = set([
 def main():
     SRC_DIR.mkdir(exist_ok=True, parents=True)
     SOURCES_DIR.mkdir(exist_ok=True, parents=True)
-    execute(["dnf", "install", "-y"] + list(BuildReq))
+    execute(["sudo", "dnf", "install", "-y"] + list(BuildReq))
     bins = (
         build_rootless() +
         build_slirp() +
