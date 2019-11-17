@@ -91,8 +91,8 @@ Services: List[Service] = [
     ("kube-apiserver",
      (f"curl {api_ca} https://localhost:8043/api", "APIVersions")),
     ("kube-controller-manager", None),
-    ("kube-scheduler", ("kubectl get componentstatuses", "Healthy")),
-    ("kubelet", ("kubectl get nodes", "Ready")),
+    ("kube-scheduler", ("/bin/kubectl get componentstatuses", "Healthy")),
+    ("kubelet", ("/bin/kubectl get nodes", "Ready")),
 ]
 HostPaths = [
     dict(name="xorg"),
@@ -634,11 +634,11 @@ def setup_service(name: str, args: List[str]) -> None:
 
 
 def generate_user_kubeconfig(ca) -> None:
-    execute(NSJOIN + ["kubectl", "apply", "-f", str(CONF / "policy.yaml")])
+    execute(NSJOIN + ["/bin/kubectl", "apply", "-f", str(CONF / "policy.yaml")])
     print("Waiting for service account token")
     for retry in range(10):
         token = b64decode(pread(NSJOIN + [
-            "kubectl", "-n", "silverkube", "get", "secrets", "-o",
+            "/bin/kubectl", "-n", "silverkube", "get", "secrets", "-o",
             "jsonpath={.items[?(@.metadata.annotations"
             "['kubernetes\\.io/service-account\\.name']=='default')]"
             ".data.token}"
