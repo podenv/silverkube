@@ -85,7 +85,7 @@ Check = Tuple[Command, ExpectedOutput]
 Service = Tuple[ServiceName, Check]
 Services: List[Service] = [
     ("rootlesskit", None),
-    ("crio", (f"crictl --runtime-endpoint {CRIOSOCK} version",
+    ("crio", (f"/usr/libexec/silverkube/crictl --runtime-endpoint {CRIOSOCK} version",
               "RuntimeName:  cri-o")),
     ("etcd", (f"curl {etcd_ca} https://localhost:2379/version", "etcdcluste")),
     ("kube-apiserver",
