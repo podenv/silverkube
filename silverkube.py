@@ -678,8 +678,9 @@ def generate_user_kubeconfig(ca) -> None:
 
 
 def generate_systemd_conf():
-    Path(
-        "/etc/systemd/system.conf.d/kubelet-cgroups.conf").write_text(dedent("""
+    systemd_conf = Path("/etc/systemd/system.conf.d/")
+    systemd_conf.mkdir(parents=True, exist_ok=True)
+    (systemd_conf / "kubelet-cgroups.conf").write_text(dedent("""
         # Turning on Accounting helps track down performance issues.
         [Manager]
         DefaultCPUAccounting=yes
