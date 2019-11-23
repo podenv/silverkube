@@ -1,0 +1,19 @@
+- job:
+    name: benchmark-cri-o
+    description: ci-tracer demo for cri-o
+    run: playbooks/run.yaml
+    roles:
+      - zuul: software-factory/ci-tracer
+    required-projects:
+      - github.com/cri-o/cri-o
+      - github.com/podenv/silverkube
+      - softwarefactory-project.io/software-factory/ci-tracer
+    nodeset:
+      nodes:
+        - name: test-node
+          label: cloud-fedora-30
+
+- project:
+    check:
+      jobs:
+        - benchmark-cri-o

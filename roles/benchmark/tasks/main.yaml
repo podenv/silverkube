@@ -1,0 +1,54 @@
+- name: Idle for 5 seconds
+  pause:
+    seconds: 5
+
+- name: Warmup
+  command: /usr/libexec/silverkube/crictl --runtime-endpoint /run/silverkube/crio.sock pull docker.io/library/nginx:1.7.9
+  become: yes
+
+- name: Idle for 5 seconds
+  pause:
+    seconds: 5
+
+- name: Deploy payload
+  command:
+    cmd: /bin/kubectl apply -f -
+    stdin: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: nginx-deployment
+        labels:
+          app: nginx
+      spec:
+        replicas: {{ replica_count }}
+        selector:
+          matchLabels:
+            app: nginx
+        template:
+          metadata:
+            labels:
+              app: nginx
+          spec:
+            containers:
+            - name: nginx
+              image: nginx:1.7.9
+              ports:
+              - containerPort: 80
+
+- name: Wait for completion
+  shell: |
+    attempts=0
+    while [ $attempts -lt 600 ]; do
+      if [ $(/bin/kubectl get deployment nginx-deployment -o "jsonpath={.status.availableReplicas}") -eq {{ replica_count }} ]; then
+        break
+      fi
+      attempts=$[ $attempts + 1 ]
+      sleep 0.5;
+    done
+
+- name: List pods
+  command: /bin/kubectl get pods
+
+- name: Delete payload
+  command: /bin/kubectl delete deployment nginx-deployment

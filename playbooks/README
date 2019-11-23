@@ -1,0 +1,18 @@
+To run this playbook locally:
+
+# Add missing action:
+sudo touch /usr/share/ansible/plugins/action/zuul_return.py
+# Add missing path:
+mkdir -p ~/src/softwarefactory-project.io/software-factory/ ~/src/github.com/podenv/ ~/src/github.com/cri-o/ ~/zuul-output/logs
+# Set ci-tracer path
+ln -s ~/ci-tracer/ ~/src/softwarefactory-project.io/software-factory/
+ln -s ~/silverkube/ ~/src/github.com/podenv/
+ln -s ~/.cache/silverkube/src/github.com/cri-o/cri-o/ ~/src/github.com/cri-o/
+# Set hosts
+cat << EOF > hosts
+[all]
+localhost ansible_connection=local ansible_python_interpreter=python3
+EOF
+
+# Run:
+ansible-playbook -i hosts -vv run.yaml -e ansible_user_dir=/home/fedora

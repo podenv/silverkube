@@ -1,0 +1,58 @@
+- name: Build silverkube libexec
+  become: yes
+  block:
+    - name: Install requirements
+      package:
+        name:
+          - etcd
+          - runc
+          - slirp4netns
+          - conmon
+          - containernetworking-plugins
+          - curl
+          - kubernetes-client
+
+    - name: Create silverkube libexec
+      file:
+        path: /usr/libexec/silverkube
+        state: directory
+
+    - name: Fetch hyperkube
+      get_url:
+        url: https://storage.googleapis.com/kubernetes-release/release/v1.15.3/bin/linux/amd64/hyperkube
+        dest: /usr/libexec/silverkube/hyperkube
+        checksum: sha256:3685c65b4fb85d552f77346900affc2e9a1bc997b4cd3dde0e705fd8c1d9be7a
+        mode: "0755"
+
+    - name: Symlink fedora component in place of silverkube
+      shell: |
+        for i in conmon etcd runc slirp4netns; do
+          ln -sf /usr/bin/$i /usr/libexec/silverkube/$i
+        done
+        ln -sf /usr/libexec/cni/ /usr/libexec/silverkube/cni
+
+    - name: Build crio
+      shell: |
+        dnf install -y autoconf rpm-build glib2-devel glibc-static gpgme-devel go make libgpg-error-devel selinux-policy-devel selinux-policy gcc-c++ device-mapper-devel git bzip2 libassuan-devel curl glibc-devel runc pkgconfig libselinux-devel libcap-devel automake libtool libseccomp-devel gcc which containers-common btrfs-progs-devel
+        cd {{ ansible_user_dir }}/src/github.com/cri-o/cri-o
+        make BUILDTAGS='seccomp'
+        cp bin/crio /usr/libexec/silverkube/crio
+        chcon system_u:object_r:container_runtime_exec_t:s0  /usr/libexec/silverkube/crio
+      environment:
+        GOPATH: "{{ ansible_user_dir }}"
+      args:
+        creates: /usr/libexec/silverkube/crio
+
+    - name: Install crictl
+      shell: |
+        go get github.com/kubernetes-sigs/cri-tools/cmd/crictl
+        cp {{ ansible_user_dir }}/bin/crictl /usr/libexec/silverkube/crictl
+      args:
+        creates: /usr/libexec/silverkube/crictl
+      environment:
+        GOPATH: "{{ ansible_user_dir }}"
+
+- name: Create user ~/.kube directory
+  file:
+    path: "{{ ansible_user_dir }}/.kube"
+    state: directory

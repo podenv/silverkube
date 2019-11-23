@@ -1,0 +1,10 @@
+- name: Run silverkube deployment script
+  command: "{{ ansible_user_dir }}/src/github.com/podenv/silverkube/silverkube.py"
+  become: yes
+
+- name: Install kubeconfig
+  copy:
+    remote_src: yes
+    src: /etc/silverkube/kubeconfig
+    dest: "{{ ansible_user_dir }}/.kube/config"
+    mode: "0444"
