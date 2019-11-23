@@ -10,10 +10,10 @@
   pause:
     seconds: 5
 
-- name: Deploy payload
-  command:
-    cmd: /bin/kubectl apply -f -
-    stdin: |
+- name: Write payload
+  copy:
+    dest: "{{ ansible_user_dir }}/payload.yaml"
+    content: |
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -35,6 +35,9 @@
               image: nginx:1.7.9
               ports:
               - containerPort: 80
+
+- name: Deploy payload
+  command: "/bin/kubectl apply -f {{ ansible_user_dir }}/payload.yaml"
 
 - name: Wait for completion
   shell: |
