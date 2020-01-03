@@ -785,7 +785,7 @@ def up() -> int:
                       str(PKI / "kubelet-cert.pem"),
                       "--kubelet-client-key",
                       str(PKI / "kubelet-key.pem"),
-#                      "--allow-privileged=true",
+                      "--allow-privileged=true",
                       "--service-cluster-ip-range", SERVICES_CIDR,
 # disable psp for now
 #                      "--enable-admission-plugins ",
