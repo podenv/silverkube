@@ -860,6 +860,11 @@ def down() -> int:
         except RuntimeError:
             pass
     print("down!")
+    if "silverkube" in Path("/proc/mounts").read_text():
+        try:
+            execute(["sh", "-c", "umount $(grep silverkube /proc/mounts  | awk '{ print $2 }')"])
+        except RuntimeError:
+            pass
     execute(["rm", "-Rf", str(RUN)])
     execute(["sudo", "rm", "-Rf", str(CRIO_RUNROOT)])
     return 0
