@@ -883,13 +883,14 @@ def down() -> int:
             pass
     print("down!")
     try:
-        execute(["/usr/libexec/silverkube/hyperkube",
-                 "kube-proxy", "--cleanup", "--cleanup-ipvs", "--config", str(CONF / "kube-proxy.yaml")])
+        if not USERNETES:
+            execute(["/usr/libexec/silverkube/hyperkube",
+                     "kube-proxy", "--cleanup", "--cleanup-ipvs", "--config", str(CONF / "kube-proxy.yaml")])
     except RuntimeError:
         pass
     if "silverkube" in Path("/proc/mounts").read_text():
         try:
-            execute(["sh", "-c", "umount $(grep silverkube /proc/mounts  | awk '{ print $2 }')"])
+            execute(["sudo", "sh", "-c", "umount $(grep silverkube /proc/mounts  | awk '{ print $2 }')"])
         except RuntimeError:
             pass
     execute(["rm", "-Rf", str(RUN)])
