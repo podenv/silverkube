@@ -98,7 +98,8 @@ Services: List[Service] = [
     ("kube-scheduler", ("/bin/kubectl get componentstatuses", "Healthy")),
     ("kube-proxy", None),
     ("kubelet", ("/bin/kubectl get nodes", "Ready")),
-    ("coredns", (f"dig @{KUBE_GATEWAY} ns.dns.cluster.local +noall +answer", "10.42.0.1")),
+    ("coredns", None),
+    # coredns check requires bridge (f"dig @{KUBE_GATEWAY} ns.dns.cluster.local +noall +answer", "10.42.0.1")),
 ]
 HostPaths = [
     dict(name="xorg"),
