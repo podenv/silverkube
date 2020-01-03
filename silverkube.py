@@ -91,6 +91,7 @@ Services: List[Service] = [
     ("kube-apiserver",
      (f"curl {api_ca} https://localhost:8043/api", "APIVersions")),
     ("kube-controller-manager", None),
+    ("coredns", ("dig @10.43.0.1 ns.dns.cluster.local +noall +answer", "10.43.0.1")),
     ("kube-scheduler", ("/bin/kubectl get componentstatuses", "Healthy")),
     ("kubelet", ("/bin/kubectl get nodes", "Ready")),
 ]
@@ -317,8 +318,10 @@ def generate_kubeconfig(ca: str):
       tlsPrivateKeyFile: "%s"
       authorization:
         mode: Webhook
-      clusterDomain: "silverkube"
-      resolvConf: "/etc/resolv.conf"
+      clusterDomain: "cluster.local"
+      clusterDNS:
+        - "10.43.0.1"
+      podCIDR: "10.43.0.1/16"
       ImageMinimumGCAge: 100000m
       HighThresholdPercent: 100
       LowThresholdPercent: 0
@@ -677,6 +680,18 @@ def generate_user_kubeconfig(ca) -> None:
     return kube_config_user
 
 
+def setup_coredns():
+    (CONF / "Corefile").write_text(dedent("""
+        .:53 {
+            kubernetes cluster.local 10.43.0.1/16 {
+              kubeconfig %s local
+              pods insecure
+            }
+            forward . /etc/resolv.conf
+            cache 30
+        }
+    """ % (str(CONF / "kubeconfig")))[1:])
+
 def generate_systemd_conf():
     systemd_conf = Path("/etc/systemd/system.conf.d/")
     systemd_conf.mkdir(parents=True, exist_ok=True)
@@ -711,6 +726,7 @@ def up() -> int:
     generate_kubeconfig(ca)
     generate_crio_conf()
     generate_policy()
+    setup_coredns()
     setup_service("rootlesskit",
                   [
                       "--state-dir", str(RUN / "rk"),
@@ -755,7 +771,7 @@ def up() -> int:
                       "--kubelet-client-key",
                       str(PKI / "kubelet-key.pem"),
 #                      "--allow-privileged=true",
-                      "--service-cluster-ip-range 127.0.0.1/24",
+                      "--service-cluster-ip-range 10.43.0.1/16",
 # disable psp for now
 #                      "--enable-admission-plugins ",
 #                      "PodSecurityPolicy",
@@ -777,6 +793,8 @@ def up() -> int:
                       "--use-service-account-credentials=true",
                       f"--v={VERBOSE}",
                   ])
+    setup_service("coredns",
+                  ["--conf", str(CONF / "Corefile")])
     setup_service("kube-scheduler",
                   [
                       "--kubeconfig", str(KUBECONFIG),
