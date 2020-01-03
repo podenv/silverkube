@@ -358,7 +358,7 @@ def generate_kubeconfig(ca: str):
             "type": "bridge",
             "bridge": "sk0",
             "isGateway": true,
-            "ipMasq": true,
+            "hairpinMode": true,
             "ipam": {
                 "type": "host-local",
                 "subnet": "%s",
