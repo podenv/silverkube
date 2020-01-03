@@ -220,6 +220,7 @@ def main():
         "Release: 1%{?dist}",
         "Summary: A kubernetes service for desktop",
         "",
+        "Requires: iptables, ipset, conntrack-tools"
         "Requires(post): udica",
         "Requires(post): coreutils",
         "",

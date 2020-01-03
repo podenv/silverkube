@@ -77,6 +77,10 @@ api_ca = (
     f"{ca}  -E " + str(PKI / "sa-cert.pem") +
     " --key " + str(PKI / "sa-key.pem"))
 
+KUBE_GATEWAY = "10.43.0.1"
+PODS_CIDR = "10.43.0.0/16"
+SERVICES_CIDR = "10.42.0.0/16"
+
 # Types
 ServiceName = str
 Command = str
@@ -91,9 +95,10 @@ Services: List[Service] = [
     ("kube-apiserver",
      (f"curl {api_ca} https://localhost:8043/api", "APIVersions")),
     ("kube-controller-manager", None),
-    ("coredns", ("dig @10.43.0.1 ns.dns.cluster.local +noall +answer", "10.43.0.1")),
     ("kube-scheduler", ("/bin/kubectl get componentstatuses", "Healthy")),
+    ("kube-proxy", None),
     ("kubelet", ("/bin/kubectl get nodes", "Ready")),
+    ("coredns", (f"dig @{KUBE_GATEWAY} ns.dns.cluster.local +noall +answer", "10.42.0.1")),
 ]
 HostPaths = [
     dict(name="xorg"),
@@ -320,14 +325,24 @@ def generate_kubeconfig(ca: str):
         mode: Webhook
       clusterDomain: "cluster.local"
       clusterDNS:
-        - "10.43.0.1"
-      podCIDR: "10.43.0.1/16"
+        - "%s"
+      podCIDR: "%s"
       ImageMinimumGCAge: 100000m
       HighThresholdPercent: 100
       LowThresholdPercent: 0
     """)[1:] % (str(PKI / "ca.pem"),
                 str(PKI / "kubelet-cert.pem"),
-                str(PKI / "kubelet-key.pem")))
+                str(PKI / "kubelet-key.pem"),
+                KUBE_GATEWAY, PODS_CIDR))
+
+    (CONF / "kube-proxy.yaml").write_text(dedent("""
+        kind: KubeProxyConfiguration
+        apiVersion: kubeproxy.config.k8s.io/v1alpha1
+        clientConnection:
+          kubeconfig: "%s"
+        mode: "iptables"
+        clusterCIDR: "%s"
+    """)[1:] % (str(KUBECONFIG), SERVICES_CIDR))
 
     (CONF / "net.d").mkdir(exist_ok=True)
     (CONF / "net.d" / "loopback.conf").write_text(dedent("""
@@ -346,13 +361,13 @@ def generate_kubeconfig(ca: str):
             "ipMasq": true,
             "ipam": {
                 "type": "host-local",
-                "subnet": "10.43.0.0/16",
+                "subnet": "%s",
                 "routes": [
                     { "dst": "0.0.0.0/0" }
                 ]
             }
         }
-    """)[1:])
+    """)[1:] % PODS_CIDR)
 
 
 def generate_policy():
@@ -683,7 +698,7 @@ def generate_user_kubeconfig(ca) -> None:
 def setup_coredns():
     (CONF / "Corefile").write_text(dedent("""
         .:53 {
-            kubernetes cluster.local 10.43.0.1/16 {
+            kubernetes cluster.local silverkube {
               kubeconfig %s local
               pods insecure
             }
@@ -771,7 +786,7 @@ def up() -> int:
                       "--kubelet-client-key",
                       str(PKI / "kubelet-key.pem"),
 #                      "--allow-privileged=true",
-                      "--service-cluster-ip-range 10.43.0.1/16",
+                      "--service-cluster-ip-range", SERVICES_CIDR,
 # disable psp for now
 #                      "--enable-admission-plugins ",
 #                      "PodSecurityPolicy",
@@ -780,6 +795,8 @@ def up() -> int:
     setup_service("kube-controller-manager",
                   [
                       "--bind-address 127.0.0.1",
+                      "--cluster-cidr", PODS_CIDR,
+                      "--service-cluster-ip-range", SERVICES_CIDR,
                       "--cluster-signing-cert-file", str(PKI / "ca.pem"),
                       "--cluster-signing-key-file", str(PKI / "cakey.pem"),
                       "--kubeconfig", str(KUBECONFIG),
@@ -798,6 +815,11 @@ def up() -> int:
     setup_service("kube-scheduler",
                   [
                       "--kubeconfig", str(KUBECONFIG),
+                      f"--v={VERBOSE}",
+                  ])
+    setup_service("kube-proxy",
+                  [
+                      "--config", str(CONF / "kube-proxy.yaml"),
                       f"--v={VERBOSE}",
                   ])
     setup_service("kubelet",
@@ -860,6 +882,11 @@ def down() -> int:
         except RuntimeError:
             pass
     print("down!")
+    try:
+        execute(["/usr/libexec/silverkube/hyperkube",
+                 "kube-proxy", "--cleanup", "--cleanup-ipvs", "--config", str(CONF / "kube-proxy.yaml")])
+    except RuntimeError:
+        pass
     if "silverkube" in Path("/proc/mounts").read_text():
         try:
             execute(["sh", "-c", "umount $(grep silverkube /proc/mounts  | awk '{ print $2 }')"])
