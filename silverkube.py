@@ -181,8 +181,8 @@ def generate_certs() -> None:
 def generate_crio_conf() -> None:
     if USERNETES:
         uidmapping = ",".join([
-            "0:1:999",
             "1000:0:1",
+            "0:1:1000",
             "1001:1001:%s" % (2**16 - 1001)
         ])
         # selinux is disabled or not supported
