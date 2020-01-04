@@ -32,8 +32,6 @@ BIN_DIR = BASE_DIR / "bin"
 
 environ["GOPATH"] = str(BASE_DIR)
 
-# TODO: build coredns
-
 # 2019-09-02T05:32:23Z
 ROOTLESSKIT_COMMIT = "182be5f88e62f3568b86331356d237910909b24e"
 # 2019-08-30T11:19:53Z
@@ -47,12 +45,13 @@ CNI_PLUGINS_COMMIT = "497560f35f2cef2695f1690137b0bba98adf849b"
 # 2019-09-24T20:37:53Z
 KUBERNETES_COMMIT = "948870b5840add1ba4068e3d27d54ea353839992"
 CONMON_RELEASE = "v2.0.1"
+# Wed Dec 11 19:16:53 2019 tag: v1.6.6
+COREDNS_COMMIT = "6a7a75e0cc14159177e604d0157836cc32add343"
 # Kube's build script requires KUBE_GIT_VERSION to be set to a semver string
 KUBE_GIT_VERSION = "v1.17.0-usernetes"
 # 01/23/2017 (v.1.7.3.2)
 SOCAT_COMMIT = "cef0e039a89fe3b38e36090d9fe4be000973e0be"
-FLANNEL_RELEASE = "v0.11.0"
-GOTASK_RELEASE = "v2.7.0"
+
 ETCD_RELEASE = "v3.4.1"
 BAZEL_RELEASE = "0.29.1"
 
@@ -148,6 +147,19 @@ def build_cni() -> List[Path]:
     return list(map(lambda x: git / "bin" / x, sorted(plugins)))
 
 
+def build_coredns() -> List[Path]:
+    print("Building coredns")
+    git = clone("https://github.com/coredns/coredns",
+                COREDNS_COMMIT)
+    coredns = git / "coredns"
+    if not coredns.exists():
+        del environ["GOPATH"]
+        execute(["go", "mod", "vendor"], git)
+        execute(["make"], git)
+        environ["GOPATH"] = str(BASE_DIR)
+    return [coredns]
+
+
 def build_kube() -> List[Path]:
     print("Building kube")
     bazel = Path("/usr/local/bin/bazel")
@@ -209,6 +221,7 @@ def main():
         build_runc() +
         build_crio() +
         build_conmon() +
+        build_coredns() +
         build_kube() +
         build_etcd()
     )
@@ -217,7 +230,7 @@ def main():
     specfile = [
         "Name: silverkube",
         "Version: 0.0.2",
-        "Release: 1%{?dist}",
+        "Release: 2%{?dist}",
         "Summary: A kubernetes service for desktop",
         "",
         "Requires: iptables, ipset, conntrack-tools"
