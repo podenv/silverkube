@@ -1,0 +1,22 @@
+FROM registry.fedoraproject.org/fedora:31
+
+RUN dnf install -y acl attr basesystem bash file pciutils which time \
+  bind-utils iproute tcpdump nmap-ncat \
+  bc bzip2 gnupg2 htop less lsof procps-ng psmisc strace sudo \
+  tar tree unzip vim-enhanced \
+  sway \
+  xorg-x11-xauth xorg-x11-drv-vesa xorg-x11-drv-evdev \
+  xorg-x11-drv-fbdev xorg-x11-drv-intel xorg-x11-drv-libinput \
+  xorg-x11-drv-qxl xorg-x11-drv-vesa xorg-x11-utils  xorg-x11-xkb-utils \
+  xterm xorg-x11-server-Xspice xorg-x11-twm \
+  kubernetes-client
+
+# Fix Xorg startup issue
+RUN bash -c "echo allowed_users = anybody > /etc/X11/Xwrapper.config"
+
+# Ensure unprivileged user has environment
+RUN useradd -u 1000 -m fedora && \
+  mkdir -p /run/user/1000 && chown 1000:1000 /run/user/1000 && \
+  mkdir -p /run/user/0 && chown 0:0 /run/user/0
+
+COPY tools/* /bin/
