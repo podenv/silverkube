@@ -38,8 +38,8 @@ ROOTLESSKIT_COMMIT = "182be5f88e62f3568b86331356d237910909b24e"
 SLIRP4NETNS_COMMIT = "f9503feb2adcd33ad817f954d294f2076de80f45"
 # 2019-09-18T18:53:36Z
 RUNC_COMMIT = "2186cfa3cd52b8e00b1de76db7859cacdf7b1f94"
-# 2019-09-20T19:14:38Z
-CRIO_COMMIT = "d9c19635885197f8667c9f7e9b9e7c6764b19921"
+# Sat Jan 4 12:13:38 2020
+CRIO_COMMIT = "a82ac66f0b89f6caaa1d1a127c0fd7992522a396"
 # 2019-09-18T15:12:43Z
 CNI_PLUGINS_COMMIT = "497560f35f2cef2695f1690137b0bba98adf849b"
 # 2019-09-24T20:37:53Z
@@ -70,8 +70,9 @@ def clone(url: str, commit: str) -> Path:
         execute(["git", "checkout", commit],
                 dest)
     except Exception:
-        # TODO: ensure commit is correct
-        raise
+        execute(["git", "fetch", "origin"], dest)
+        execute(["git", "checkout", commit], dest)
+    # TODO: ensure commit is correct
     return dest
 
 
@@ -118,13 +119,16 @@ def build_crio() -> List[Path]:
     print("Building crio")
     git = clone("https://github.com/cri-o/cri-o", CRIO_COMMIT)
     crio = git / "bin" / "crio"
+    pinns = git / "bin" / "pinns"
     crictl = BIN_DIR / "crictl"
     if not crio.exists():
         execute(["make", "bin/crio"], git)
+    if not pinns.exists():
+        execute(["make", "bin/pinns"], git)
     if not crictl.exists():
         execute(["go", "get",
                  "github.com/kubernetes-sigs/cri-tools/cmd/crictl"])
-    return [crio, crictl]
+    return [crio, pinns, crictl]
 
 
 def build_conmon() -> List[Path]:
@@ -229,11 +233,11 @@ def main():
 
     specfile = [
         "Name: silverkube",
-        "Version: 0.0.2",
-        "Release: 2%{?dist}",
+        "Version: 0.0.3",
+        "Release: 1%{?dist}",
         "Summary: A kubernetes service for desktop",
         "",
-        "Requires: iptables, ipset, conntrack-tools"
+        "Requires: iptables, ipset, conntrack-tools",
         "Requires(post): udica",
         "Requires(post): coreutils",
         "",

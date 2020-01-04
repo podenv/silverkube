@@ -222,19 +222,6 @@ def generate_crio_conf() -> None:
     seccomp_profile = ""
     apparmor_profile = ""
     cgroup_manager = "cgroupfs"
-    default_capabilities = [
-            "CHOWN",
-            "DAC_OVERRIDE",
-            "FSETID",
-            "FOWNER",
-            "NET_RAW",
-            "SETGID",
-            "SETUID",
-            "SETPCAP",
-            "NET_BIND_SERVICE",
-            "SYS_CHROOT",
-            "KILL",
-    ]
     default_sysctls = []
     additional_devices = [
       "/dev/tty1:/dev/tty1:rwm",
@@ -248,7 +235,6 @@ def generate_crio_conf() -> None:
       "/dev/input/mouse1:/dev/input/mouse1:rwm",
     ]
     hooks_dir = []
-    default_mounts = []
     pids_limit = 1024
     log_size_max = -1
     log_to_journald = false
@@ -260,7 +246,7 @@ def generate_crio_conf() -> None:
     uid_mappings = "{uidmapping}"
     gid_mappings = "{uidmapping}"
     ctr_stop_timeout = 0
-    manage_network_ns_lifecycle = false
+    pinns_path = "/usr/libexec/silverkube/pinns"
 
     [crio.runtime.runtimes.runc]
     runtime_path = ""
