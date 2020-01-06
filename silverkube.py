@@ -230,6 +230,7 @@ Services: List[Service] = [
               "type": "bridge",
               "bridge": "sk0",
               "isGateway": true,
+              "ipMasq": true,
               "hairpinMode": true,
               "ipam": {
                   "type": "host-local",
@@ -380,14 +381,14 @@ Services: List[Service] = [
      """) % (str(PKI / "ca.pem"),
              str(PKI / "kubelet-cert.pem"),
              str(PKI / "kubelet-key.pem"),
-             KUBE_GATEWAY, PODS_CIDR))] + [] if USERNETES else [
+             KUBE_GATEWAY, PODS_CIDR))] + ([] if USERNETES else [
                  (Path("/etc/systemd/system.conf.d/kubelet-cgroups.conf"), dedent("""
           # Turning on Accounting helps track down performance issues.
           [Manager]
           DefaultCPUAccounting=yes
           DefaultMemoryAccounting=yes
           DefaultBlockIOAccounting=yes
-                 """))]
+                 """))])
      , ("/bin/kubectl get nodes", "Ready")),
 
     ("coredns", True, ["--conf", str(CONF / "Corefile")]
