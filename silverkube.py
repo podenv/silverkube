@@ -74,6 +74,7 @@ api_ca = (
 
 KUBE_GATEWAY = "10.43.0.1"
 PODS_CIDR = "10.43.0.0/16"
+KUBE_ENDPOINT = "10.42.0.1"
 SERVICES_CIDR = "10.42.0.0/16"
 
 # Types
@@ -464,7 +465,8 @@ def generate_certs() -> str:
 
       [alt_names]
       DNS.1 = localhost
-    """))
+      IP = %s
+    """ % (KUBE_ENDPOINT)))
     (PKI / "ca.srl").write_text("00\n")
     if not (PKI / "cakey.pem").exists():
         execute(["openssl", "req", "-nodes", "-days", "3650", "-new",
