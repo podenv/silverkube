@@ -27,6 +27,7 @@ from pathlib import Path
 from textwrap import dedent
 
 USERNETES = getuid() > 0
+RKJOIN = Path("~/.local/bin/rootless-join").expanduser()
 
 if USERNETES:
     # User Paths
@@ -37,25 +38,12 @@ if USERNETES:
     RUN = Path(environ["XDG_RUNTIME_DIR"]) / "silverkube"
     SYSTEMD = Path("~/.config/systemd/user").expanduser()
     SYSTEMCTL = ["systemctl", "--user"]
-    RKJOIN = Path("~/.local/bin/rootless-join").expanduser()
-    RKINIT = CONF / "rkinit"
     NSJOIN = [str(RKJOIN)]
-    EXTRA_ARGS = dict(
-        ROOTLESSKIT=[str(RKINIT)],
-        KUBELET=[
-            "--feature-gates",
-            "DevicePlugins=false,SupportNoneCgroupDriver=true",
-            "--cgroup-driver=none --cgroups-per-qos=false",
-            "--enforce-node-allocatable=''",
-            "--register-node=true",
-        ],
-    )
     UIDMAPPING = ",".join([
         "1000:0:1",
         "0:1:1000",
         "1001:1001:%s" % (2**16 - 1001)
     ])
-    SELINUX = False
 else:
     # Admin Paths
     CONF = Path("/etc/silverkube")
@@ -66,12 +54,11 @@ else:
     SYSTEMD = Path("/etc/systemd/system")
     SYSTEMCTL = ["systemctl"]
     NSJOIN = []
-    EXTRA_ARGS = dict()
     UIDMAPPING = ""
-    SELINUX = True
 
 VERBOSE = "0"
 LOGS = RUN / "logs"
+RKINIT = CONF / "rkinit"
 PKI = CONF / "pki"
 KUBECONFIG = CONF / "kubeconfig"
 CRIOSOCKPATH = f"{RUN}/crio.sock"
@@ -109,7 +96,8 @@ Services: List[Service] = [
          "--copy-up=/etc --copy-up=/run --copy-up=/var/lib",
          "--copy-up=/opt",  # --copy-up=/sys",
          "--pidns",
-     ] + EXTRA_ARGS.get("ROOTLESSKIT", [])
+         str(RKINIT)
+     ]
      , [(RKJOIN, dedent("""
           #!/bin/sh
           NS="${XDG_RUNTIME_DIR}/silverkube/rk/child_pid"
@@ -178,7 +166,7 @@ Services: List[Service] = [
           conmon_env = [
                   "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
           ]
-          selinux = {'true' if SELINUX else 'false'}
+          selinux = {'false' if USERNETES else 'false'}
           seccomp_profile = ""
           apparmor_profile = ""
           cgroup_manager = "cgroupfs"
@@ -360,7 +348,13 @@ Services: List[Service] = [
          "--kubeconfig", str(KUBECONFIG),
          "--register-node=true",
          f"--v={VERBOSE}",
-     ] + EXTRA_ARGS.get("KUBELET", [])
+     ] + ([
+         "--feature-gates",
+         "DevicePlugins=false,SupportNoneCgroupDriver=true",
+         "--cgroup-driver=none --cgroups-per-qos=false",
+         "--enforce-node-allocatable=''",
+         "--register-node=true",
+        ] if USERNETES else [])
      , [(CONF / "kubelet-config.yaml", dedent("""
           kind: KubeletConfiguration
           apiVersion: kubelet.config.k8s.io/v1beta1
@@ -816,6 +810,8 @@ def up() -> int:
 
     execute(SYSTEMCTL + ["daemon-reload"])
     for service in Services:
+        if not service[1]:
+            continue
         name = service[0]
         print(f"Starting silverkube-{name}")
         execute(SYSTEMCTL + ["start", f"silverkube-{name}"])
