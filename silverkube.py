@@ -405,12 +405,6 @@ Services: List[Service] = [
      , None),
     # coredns check requires bridge (f"dig @{KUBE_GATEWAY} ns.dns.cluster.local +noall +answer", "10.42.0.1")),
 ]
-HostPaths = [
-    dict(name="xorg"),
-    dict(name="wayland"),
-    dict(name="dbus"),
-    dict(name="pulseaudio"),
-]
 
 
 # Utility procedures
@@ -781,15 +775,30 @@ def generate_user_kubeconfig(ca) -> Path:
 
 
 def generate_pvs():
-    base = Path("/tmp/.silverkube")
+    base = RUN / "pvs"
     base.mkdir(exist_ok=True)
     base.chmod(0o700)
     chown(str(base), 1000, 1000)
-    for pv in HostPaths:
-        path = Path(pv.get('path', base / pv['name']))
+    pvs = []
+    for pv in range(10):
+        path = base / f"pv{pv}"
         path.mkdir(parents=True, exist_ok=True)
         chown(str(path), 1000, 1000)
         execute(["chcon", "system_u:object_r:container_file_t:s0", str(path)])
+        pvs.append(dict(
+            apiVersion="v1",
+            kind="PersistentVolume",
+            metadata=dict(name=f"sk-pv{pv}"),
+            spec=dict(
+                capacity=dict(storage="30Gi"),
+                accessModes=["ReadWriteOnce"],
+                hostPath=dict(path=str(path)))))
+    (CONF / "pvs.yaml").write_text(json_dumps(dict(
+        apiVersion="v1",
+        kind="List",
+        items=pvs
+    )))
+    execute(NSJOIN + ["/bin/kubectl", "apply", "-f", str(CONF / "pvs.yaml")])
 
 
 def up() -> int:
@@ -838,8 +847,8 @@ def up() -> int:
                 print(res)
                 raise RuntimeError(f"Fail to check {name}")
     print("up!")
+    generate_pvs()
 # disable psp for now
-#    generate_pvs()
 #    generate_policy()
 #    kube_config_user = generate_user_kubeconfig(ca)
     kube_config_user = KUBECONFIG
