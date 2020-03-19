@@ -233,11 +233,11 @@ def main():
 
     specfile = [
         "Name: silverkube",
-        "Version: 0.0.3",
+        "Version: 0.0.4",
         "Release: 1%{?dist}",
         "Summary: A kubernetes service for desktop",
         "",
-        "Requires: iptables, ipset, conntrack-tools",
+        "Requires: iptables, ipset, conntrack-tools, containers-common",
         "Requires(post): udica",
         "Requires(post): coreutils",
         "",
