@@ -466,8 +466,9 @@ def generate_certs() -> str:
 
       [alt_names]
       DNS.1 = localhost
-      IP = %s
-    """ % (KUBE_ENDPOINT)))
+      IP.1 = %s
+      IP.2 = %s
+    """ % (KUBE_ENDPOINT, KUBE_GATEWAY)))
     (PKI / "ca.srl").write_text("00\n")
     if not (PKI / "cakey.pem").exists():
         execute(["openssl", "req", "-nodes", "-days", "3650", "-new",
