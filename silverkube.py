@@ -18,7 +18,7 @@
 
 from base64 import b64encode, b64decode
 from json import dumps as json_dumps
-from os import environ, getuid, chown
+from os import environ, getuid, getgid, chown
 from subprocess import Popen, PIPE
 from time import sleep
 from typing import List, Tuple, Optional
@@ -26,7 +26,10 @@ from sys import argv
 from pathlib import Path
 from textwrap import dedent
 
-USERNETES = getuid() > 0
+UID = getuid()
+GID = getgid()
+NEXT_UID = UID + 1
+USERNETES = UID > 0
 RKJOIN = Path("~/.local/bin/rootless-join").expanduser()
 
 if USERNETES:
@@ -39,7 +42,9 @@ if USERNETES:
     SYSTEMD = Path("~/.config/systemd/user").expanduser()
     SYSTEMCTL = ["systemctl", "--user"]
     NSJOIN = [str(RKJOIN)]
-    UIDMAPPING = ",".join(["1000:0:1", "0:1:1000", "1001:1001:%s" % (2 ** 16 - 1001)])
+    UIDMAPPING = ",".join(
+        [f"{UID}:0:1", f"0:1:{UID}", f"{NEXT_UID}:{NEXT_UID}:%s" % (2 ** 16 - NEXT_UID)]
+    )
 else:
     # Admin Paths
     CONF = Path("/etc/silverkube")
@@ -93,7 +98,7 @@ Services: List[Service] = [
             "--port-driver=builtin",
             "--copy-up=/etc --copy-up=/run --copy-up=/var/lib",
             "--copy-up=/opt",  # --copy-up=/sys",
-            "--pidns",
+            "--pidns --cgroupns --ipcns --utsns --propagation=rslave",
             str(RKINIT),
         ],
         [
@@ -129,6 +134,8 @@ Services: List[Service] = [
           # This is not actually working...
           # umount -l /sys
 
+          mount -t tmpfs none /sys/fs/cgroup
+          mount -t cgroup2 none /sys/fs/cgroup
           mount --bind /usr/libexec/silverkube/cni /opt/cni/bin
           mount --bind {CONF}/net.d/ /etc/cni/net.d/
           for dst in /var/lib/kubelet /var/lib/cni /var/log /var/lib/crio; do
@@ -174,7 +181,7 @@ Services: List[Service] = [
           grpc_max_recv_msg_size = 16777216
 
           [crio.runtime]
-          default_runtime = "runc"
+          default_runtime = "crun"
           no_pivot = false
           conmon = "/usr/libexec/silverkube/conmon"
           conmon_cgroup = "pod"
@@ -211,10 +218,10 @@ Services: List[Service] = [
           ctr_stop_timeout = 0
           pinns_path = "/usr/libexec/silverkube/pinns"
 
-          [crio.runtime.runtimes.runc]
-          runtime_path = ""
+          [crio.runtime.runtimes.crun]
+          runtime_path = "/usr/libexec/silverkube/crun"
           runtime_type = "oci"
-          runtime_root = "{RUN}/runc"
+          runtime_root = "{RUN}/crun"
 
           [crio.image]
           default_transport = "docker://"
@@ -314,6 +321,10 @@ Services: List[Service] = [
             str(PKI / "api-key.pem"),
             "--bind-address 0.0.0.0",
             "--secure-port 8043",
+            "--service-account-issuer",
+            "test",
+            "--service-account-signing-key-file",
+            str(PKI / "sa-key.pem"),
             "--service-account-key-file",
             str(PKI / "sa-cert.pem"),
             "--anonymous-auth=False",
@@ -454,8 +465,7 @@ Services: List[Service] = [
         + (
             [
                 "--feature-gates",
-                "DevicePlugins=false,SupportNoneCgroupDriver=true",
-                "--cgroup-driver=none --cgroups-per-qos=false",
+                "DevicePlugins=false",
                 "--enforce-node-allocatable=''",
                 "--register-node=true",
             ]
@@ -483,7 +493,14 @@ Services: List[Service] = [
           clusterDomain: "cluster.local"
           clusterDNS:
             - "%s"
+          featureGates:
+            DevicePlugins: false
+            LocalStorageCapacityIsolation: false
+          evictionHard:
+            nodefs.available: "3%%"
           podCIDR: "%s"
+          cgroupDriver: "none"
+          cgroupsPerQOS: false
           ImageMinimumGCAge: 100000m
           HighThresholdPercent: 100
           LowThresholdPercent: 0
@@ -903,11 +920,7 @@ def setup_service(name: str, args: List[Command]) -> None:
     if name == "rootlesskit" and not USERNETES:
         # No need for that service
         return
-    if name.startswith("kube"):
-        command_name = f"hyperkube {name}"
-    else:
-        command_name = name
-    command_name = "/usr/libexec/silverkube/" + command_name
+    command_name = "/usr/libexec/silverkube/" + name
     if name != "rootlesskit" and USERNETES:
         # Usernetes needs to share the namespace
         command_name = str(RKJOIN) + " " + command_name
@@ -922,6 +935,7 @@ def setup_service(name: str, args: List[Command]) -> None:
 
         [Service]
         Environment="PATH=/usr/libexec/silverkube/:/bin:/sbin"
+        Environment="_CRIO_ROOTLESS=1"
         SyslogIdentifier=silverkube-{name}
         ExecStart={command}
 
@@ -1000,13 +1014,14 @@ def generate_pvs():
     base = RUN / "pvs"
     base.mkdir(exist_ok=True)
     base.chmod(0o700)
-    chown(str(base), 1000, 1000)
+    chown(str(base), UID, GID)
     pvs = []
     for pv in range(10):
         path = base / f"pv{pv}"
         path.mkdir(parents=True, exist_ok=True)
-        chown(str(path), 1000, 1000)
-        execute(["chcon", "system_u:object_r:container_file_t:s0", str(path)])
+        chown(str(path), UID, GID)
+        if not USERNETES:
+            execute(["chcon", "system_u:object_r:container_file_t:s0", str(path)])
         pvs.append(
             dict(
                 apiVersion="v1",
@@ -1102,8 +1117,7 @@ def down() -> int:
         if not USERNETES:
             execute(
                 [
-                    "/usr/libexec/silverkube/hyperkube",
-                    "kube-proxy",
+                    "/usr/libexec/silverkube/kube-proxy",
                     "--cleanup",
                     "--cleanup-ipvs",
                     "--config",

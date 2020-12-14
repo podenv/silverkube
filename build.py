@@ -1,5 +1,5 @@
 #!/bin/python3
-# Copyright 2019 Red Hat
+# Copyright 2020 Red Hat
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -32,28 +32,19 @@ BIN_DIR = BASE_DIR / "bin"
 
 environ["GOPATH"] = str(BASE_DIR)
 
-# 2019-09-02T05:32:23Z
-ROOTLESSKIT_COMMIT = "182be5f88e62f3568b86331356d237910909b24e"
-# 2019-08-30T11:19:53Z
-SLIRP4NETNS_COMMIT = "f9503feb2adcd33ad817f954d294f2076de80f45"
-# 2019-09-18T18:53:36Z
-RUNC_COMMIT = "2186cfa3cd52b8e00b1de76db7859cacdf7b1f94"
-# Sat Jan 4 12:13:38 2020
-CRIO_COMMIT = "a82ac66f0b89f6caaa1d1a127c0fd7992522a396"
-# 2019-09-18T15:12:43Z
-CNI_PLUGINS_COMMIT = "497560f35f2cef2695f1690137b0bba98adf849b"
-# 2019-09-24T20:37:53Z
-KUBERNETES_COMMIT = "948870b5840add1ba4068e3d27d54ea353839992"
-CONMON_RELEASE = "v2.0.1"
-# Wed Dec 11 19:16:53 2019 tag: v1.6.6
-COREDNS_COMMIT = "6a7a75e0cc14159177e604d0157836cc32add343"
-# Kube's build script requires KUBE_GIT_VERSION to be set to a semver string
-KUBE_GIT_VERSION = "v1.17.0-usernetes"
-# 01/23/2017 (v.1.7.3.2)
-SOCAT_COMMIT = "cef0e039a89fe3b38e36090d9fe4be000973e0be"
+USERNETES_COMMIT = "534df949509da0bfbb9e036688bded3e03533ec2"
+ROOTLESSKIT_COMMIT = "7d4b61b7e0939e63d2d550139ee0ee0a96081b07"
+CRIO_COMMIT = "4dff9dd17d3d27046b3261bd5688581c421334a9"
+KUBERNETES_COMMIT = "v1.21.0-alpha.0"
+SLIRP4NETNS_COMMIT = "v1.1.8"
+CRUN_COMMIT = "0.16"
+CNI_PLUGINS_COMMIT = "v0.8.7"
+CONMON_RELEASE = "v2.0.21"
+COREDNS_COMMIT = "v1.8.0"
+KUBE_GIT_VERSION = "v1.21.0-usernetes"
 
-ETCD_RELEASE = "v3.4.1"
-BAZEL_RELEASE = "0.29.1"
+ETCD_RELEASE = "v3.4.14"
+BAZEL_RELEASE = "3.7.1"
 
 
 def execute(args: List[str], cwd: Path = Path(".")) -> None:
@@ -124,13 +115,15 @@ def build_slirp() -> List[Path]:
     return [slirp]
 
 
-def build_runc() -> List[Path]:
-    print("Building runc")
-    git = clone("https://github.com/opencontainers/runc", RUNC_COMMIT)
-    runc = git / "runc"
-    if not runc.exists():
-        execute(["make", "BUILDTAGS=seccomp selinux"], git)
-    return [runc]
+def build_crun() -> List[Path]:
+    print("Building crun")
+    git = clone("https://github.com/containers/crun", CRUN_COMMIT)
+    crun = git / "crun"
+    if not crun.exists():
+        execute(["./autogen.sh"], git)
+        execute(["./configure"], git)
+        execute(["make"], git)
+    return [crun]
 
 
 def build_crio() -> List[Path]:
@@ -194,14 +187,45 @@ def build_kube() -> List[Path]:
         )
         execute(["sudo", "chmod", "+x", str(bazel)])
     git = clone("https://github.com/kubernetes/kubernetes", KUBERNETES_COMMIT)
-    kube = git / "bazel-bin" / "cmd" / "hyperkube" / "hyperkube"
-    if not kube.exists():
+    cmds = ["kubelet"] + list(
+        map(
+            lambda n: "kube-" + n,
+            ["apiserver", "controller-manager", "scheduler", "proxy"],
+        )
+    )
+
+    def get_kubes():
+        try:
+            return list(
+                map(
+                    lambda cmd: Path(
+                        glob(
+                            str(
+                                git
+                                / "bazel-out"
+                                / "k8-fastbuild*"
+                                / "bin"
+                                / "cmd"
+                                / cmd
+                                / (cmd + "_")
+                                / cmd
+                            )
+                        )[0]
+                    ),
+                    cmds,
+                )
+            )
+        except IndexError:
+            return []
+
+    kubes = get_kubes()
+    if not kubes or not all(map(lambda kube: kube.exists(), kubes)):
         execute(["git", "config", "user.email", "nobody@example.com"], git)
         execute(["git", "config", "user.name", "Silverkube Build Script"], git)
         patches = (
             clone(
                 "https://github.com/rootless-containers/usernetes",
-                "d58792bd5d4c56c4dda844ea119ee05a6b0d1808",
+                USERNETES_COMMIT,
             )
             / "src"
             / "patches"
@@ -215,11 +239,14 @@ def build_kube() -> List[Path]:
                 "KUBE_GIT_VERSION=" + KUBE_GIT_VERSION,
                 "bazel",
                 "build",
-                "cmd/hyperkube",
-            ],
+            ]
+            + list(map(lambda cmd: "cmd/" + cmd, cmds)),
             git,
         )
-    return [kube]
+        kubes = get_kubes()
+        if not kubes:
+            raise RuntimeError("Couldn't find:" + cmds)
+    return kubes
 
 
 def build_etcd() -> List[Path]:
@@ -251,6 +278,8 @@ BuildReq = set(
         "automake",
         "libtool",
         "libcap-devel",
+        "libslirp-devel",
+        "yajl-devel",
         "glibc-static",
         "gcc",
         "gcc-c++",
@@ -280,7 +309,7 @@ def main():
     bins = (
         build_rootless()
         + build_slirp()
-        + build_runc()
+        + build_crun()
         + build_crio()
         + build_conmon()
         + build_coredns()
@@ -291,11 +320,11 @@ def main():
 
     specfile = [
         "Name: silverkube",
-        "Version: 0.0.4",
+        "Version: 0.1.0",
         "Release: 1%{?dist}",
         "Summary: A kubernetes service for desktop",
         "",
-        "Requires: iptables, ipset, conntrack-tools, containers-common",
+        "Requires: iptables, ipset, conntrack-tools, containers-common, kubernetes-client",
         "Requires(post): udica",
         "Requires(post): coreutils",
         "",
@@ -306,7 +335,7 @@ def main():
         "Source2: silverkube.cil",
     ]
     for idx, source in zip(range(100, 1000), bins + cnis):
-        src_name = str(source).replace("/root/.cache/silverkube/", "")
+        src_name = str(source).split(".cache/silverkube/")[1]
         specfile.append(f"Source{idx}: {src_name}")
 
     specfile.extend(
@@ -354,7 +383,7 @@ def main():
             "/usr/share/silverkube",
             "",
             "%changelog",
-            "* Sat Sep 21 2019 Tristan Cacqueray <tdecacqu@redhat.com>",
+            "* Mon Dec 14 2020 Tristan Cacqueray <tdecacqu@redhat.com>",
             "- Initial packaging",
         ]
     )

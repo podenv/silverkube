@@ -11,7 +11,7 @@ use at your own risk.
 
 ## Install
 
-- On a fedora-30 system, install the pre-built package:
+- On a fedora-33 system, install the pre-built package:
 
 ```shell
 sudo dnf install -y $SILVERKUBE_RPM_RELEASE_URL
