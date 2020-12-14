@@ -39,11 +39,7 @@ if USERNETES:
     SYSTEMD = Path("~/.config/systemd/user").expanduser()
     SYSTEMCTL = ["systemctl", "--user"]
     NSJOIN = [str(RKJOIN)]
-    UIDMAPPING = ",".join([
-        "1000:0:1",
-        "0:1:1000",
-        "1001:1001:%s" % (2**16 - 1001)
-    ])
+    UIDMAPPING = ",".join(["1000:0:1", "0:1:1000", "1001:1001:%s" % (2 ** 16 - 1001)])
 else:
     # Admin Paths
     CONF = Path("/etc/silverkube")
@@ -66,11 +62,9 @@ CRIOSOCK = f"unix://{CRIOSOCKPATH}"
 
 ca = "--cacert " + str(PKI / "ca.pem")
 etcd_ca = (
-    f"{ca} -E " + str(PKI / "etcd-cert.pem") +
-    " --key " + str(PKI / "etcd-key.pem"))
-api_ca = (
-    f"{ca}  -E " + str(PKI / "sa-cert.pem") +
-    " --key " + str(PKI / "sa-key.pem"))
+    f"{ca} -E " + str(PKI / "etcd-cert.pem") + " --key " + str(PKI / "etcd-key.pem")
+)
+api_ca = f"{ca}  -E " + str(PKI / "sa-cert.pem") + " --key " + str(PKI / "sa-key.pem")
 
 KUBE_GATEWAY = "10.43.0.1"
 PODS_CIDR = "10.43.0.0/16"
@@ -88,18 +82,25 @@ Service = Tuple[ServiceName, Enabled, List[Command], List[File], Optional[Check]
 
 # Services
 Services: List[Service] = [
-    ("rootlesskit", USERNETES,
-     [
-         "--state-dir", str(RUN / "rk"),
-         "--net=slirp4netns --mtu=65520 --disable-host-loopback",
-         "--slirp4netns-sandbox=true --slirp4netns-seccomp=true",
-         "--port-driver=builtin",
-         "--copy-up=/etc --copy-up=/run --copy-up=/var/lib",
-         "--copy-up=/opt",  # --copy-up=/sys",
-         "--pidns",
-         str(RKINIT)
-     ]
-     , [(RKJOIN, dedent("""
+    (
+        "rootlesskit",
+        USERNETES,
+        [
+            "--state-dir",
+            str(RUN / "rk"),
+            "--net=slirp4netns --mtu=65520 --disable-host-loopback",
+            "--slirp4netns-sandbox=true --slirp4netns-seccomp=true",
+            "--port-driver=builtin",
+            "--copy-up=/etc --copy-up=/run --copy-up=/var/lib",
+            "--copy-up=/opt",  # --copy-up=/sys",
+            "--pidns",
+            str(RKINIT),
+        ],
+        [
+            (
+                RKJOIN,
+                dedent(
+                    """
           #!/bin/sh
           NS="${XDG_RUNTIME_DIR}/silverkube/rk/child_pid"
           while ! test -f $NS; do
@@ -114,7 +115,13 @@ Services: List[Service] = [
           export _CRIO_ROOTLESS=1
           exec /bin/nsenter -U --preserve-credential -n -m -p -t $(cat $NS) \
             --wd=$(pwd) $*
-     """)), (RKINIT, dedent(f"""
+     """
+                ),
+            ),
+            (
+                RKINIT,
+                dedent(
+                    f"""
           #!/bin/sh
           mkdir -p /opt/cni/bin
 
@@ -132,14 +139,21 @@ Services: List[Service] = [
           rm -f /run/xtables.lock
           touch $XDG_RUNTIME_DIR/silverkube/rk/ready
           exec /bin/sleep infinity
-     """))]
-     , None),
-
-    ("crio", True,
-     [
-         "--config", str(CONF / "crio.conf")
-     ]
-     , [(CONF / "crio.conf", dedent(f"""
+     """
+                ),
+            ),
+        ],
+        None,
+    ),
+    (
+        "crio",
+        True,
+        ["--config", str(CONF / "crio.conf")],
+        [
+            (
+                CONF / "crio.conf",
+                dedent(
+                    f"""
           [crio]
           log_dir = "{LOGS}/crio-pods"
           root = "{STORAGE}"
@@ -218,12 +232,24 @@ Services: List[Service] = [
           [crio.metrics]
           enable_metrics = false
           metrics_port = 9090
-     """)), (CONF / "net.d" / "loopback.conf", dedent("""
+     """
+                ),
+            ),
+            (
+                CONF / "net.d" / "loopback.conf",
+                dedent(
+                    """
           {
                 "cniVersion": "0.3.0",
                 "type": "loopback"
           }
-     """)), (CONF / "net.d" / "bridge.conf", dedent("""
+     """
+                ),
+            ),
+            (
+                CONF / "net.d" / "bridge.conf",
+                dedent(
+                    """
           {
               "cniVersion": "0.3.0",
               "name": "sk0",
@@ -240,124 +266,207 @@ Services: List[Service] = [
                   ]
               }
           }
-     """ % PODS_CIDR))]
-     , (f"/usr/libexec/silverkube/crictl --runtime-endpoint {CRIOSOCK} version",
-        "RuntimeName:  cri-o")),
-
-    ("etcd", True,
-     [
-         "--name silverkube", "--data-dir", str(RUN / "etcd"),
-         "--key-file", str(PKI / "etcd-key.pem"),
-         "--cert-file", str(PKI / "etcd-cert.pem"),
-         "--trusted-ca-file", str(PKI / "ca.pem"),
-         "--advertise-client-urls https://127.0.0.1:2379",
-         "--listen-client-urls https://127.0.0.1:2379",
-     ]
-     , [], (f"curl {etcd_ca} https://localhost:2379/version", "etcdcluste")),
-
-    ("kube-apiserver", True,
-     [
-         "--client-ca-file", str(PKI / "ca.pem"),
-         "--etcd-cafile", str(PKI / "ca.pem"),
-         "--etcd-certfile", str(PKI / "etcd-cert.pem"),
-         "--etcd-keyfile", str(PKI / "etcd-key.pem"),
-         "--etcd-servers https://localhost:2379",
-         "--tls-cert-file", str(PKI / "api-cert.pem"),
-         "--tls-private-key-file", str(PKI / "api-key.pem"),
-         "--bind-address 0.0.0.0",
-         "--secure-port 8043",
-         "--service-account-key-file", str(PKI / "sa-cert.pem"),
-         "--anonymous-auth=False",
-         # disable abac for now
-         # "--authorization-mode=Node,RBAC,ABAC",
-         # "--authorization-policy-file", str(CONF / "abac.json"),
-         "--kubelet-client-certificate",
-         str(PKI / "kubelet-cert.pem"),
-         "--kubelet-client-key",
-         str(PKI / "kubelet-key.pem"),
-         "--allow-privileged=true",
-         "--service-cluster-ip-range", SERVICES_CIDR,
-         # disable psp for now
-         # "--enable-admission-plugins ",
-         # "PodSecurityPolicy",
-         f"--v={VERBOSE}",
-     ]
-     , [(CONF / "abac.json", "\n".join(map(
-         json_dumps, [
-             dict(apiVersion="abac.authorization.kubernetes.io/v1beta1",
-                  kind="Policy",
-                  spec=dict(user="localhost",
-                            namespace="*",
-                            resource="*",
-                            apiGroup="*"))])))]
-     , (f"curl {api_ca} https://localhost:8043/api", "APIVersions")),
-
-    ("kube-controller-manager", True,
-     [
-         "--bind-address 127.0.0.1",
-         "--cluster-cidr", PODS_CIDR,
-         "--service-cluster-ip-range", SERVICES_CIDR,
-         "--cluster-signing-cert-file", str(PKI / "ca.pem"),
-         "--cluster-signing-key-file", str(PKI / "cakey.pem"),
-         "--kubeconfig", str(KUBECONFIG),
-         "--tls-cert-file", str(PKI / "controller-cert.pem"),
-         "--tls-private-key-file",
-         str(PKI / "controller-key.pem"),
-         "--service-account-private-key-file",
-         str(PKI / "sa-key.pem"),
-         "--root-ca-file", str(PKI / "ca.pem"),
-         "--leader-elect=false",
-         "--use-service-account-credentials=true",
-         f"--v={VERBOSE}",
-     ]
-     , [], None),
-
-    ("kube-scheduler", True,
-     [
-         "--kubeconfig", str(KUBECONFIG),
-         f"--v={VERBOSE}",
-     ]
-     , [], ("/bin/kubectl get componentstatuses", "Healthy")),
-
-    ("kube-proxy", True,
-     [
-         "--config", str(CONF / "kube-proxy.yaml"),
-         f"--v={VERBOSE}",
-     ]
-     , [(CONF / "kube-proxy.yaml", dedent("""
+     """
+                    % PODS_CIDR
+                ),
+            ),
+        ],
+        (
+            f"/usr/libexec/silverkube/crictl --runtime-endpoint {CRIOSOCK} version",
+            "RuntimeName:  cri-o",
+        ),
+    ),
+    (
+        "etcd",
+        True,
+        [
+            "--name silverkube",
+            "--data-dir",
+            str(RUN / "etcd"),
+            "--key-file",
+            str(PKI / "etcd-key.pem"),
+            "--cert-file",
+            str(PKI / "etcd-cert.pem"),
+            "--trusted-ca-file",
+            str(PKI / "ca.pem"),
+            "--advertise-client-urls https://127.0.0.1:2379",
+            "--listen-client-urls https://127.0.0.1:2379",
+        ],
+        [],
+        (f"curl {etcd_ca} https://localhost:2379/version", "etcdcluste"),
+    ),
+    (
+        "kube-apiserver",
+        True,
+        [
+            "--client-ca-file",
+            str(PKI / "ca.pem"),
+            "--etcd-cafile",
+            str(PKI / "ca.pem"),
+            "--etcd-certfile",
+            str(PKI / "etcd-cert.pem"),
+            "--etcd-keyfile",
+            str(PKI / "etcd-key.pem"),
+            "--etcd-servers https://localhost:2379",
+            "--tls-cert-file",
+            str(PKI / "api-cert.pem"),
+            "--tls-private-key-file",
+            str(PKI / "api-key.pem"),
+            "--bind-address 0.0.0.0",
+            "--secure-port 8043",
+            "--service-account-key-file",
+            str(PKI / "sa-cert.pem"),
+            "--anonymous-auth=False",
+            # disable abac for now
+            # "--authorization-mode=Node,RBAC,ABAC",
+            # "--authorization-policy-file", str(CONF / "abac.json"),
+            "--kubelet-client-certificate",
+            str(PKI / "kubelet-cert.pem"),
+            "--kubelet-client-key",
+            str(PKI / "kubelet-key.pem"),
+            "--allow-privileged=true",
+            "--service-cluster-ip-range",
+            SERVICES_CIDR,
+            # disable psp for now
+            # "--enable-admission-plugins ",
+            # "PodSecurityPolicy",
+            f"--v={VERBOSE}",
+        ],
+        [
+            (
+                CONF / "abac.json",
+                "\n".join(
+                    map(
+                        json_dumps,
+                        [
+                            dict(
+                                apiVersion="abac.authorization.kubernetes.io/v1beta1",
+                                kind="Policy",
+                                spec=dict(
+                                    user="localhost",
+                                    namespace="*",
+                                    resource="*",
+                                    apiGroup="*",
+                                ),
+                            )
+                        ],
+                    )
+                ),
+            )
+        ],
+        (f"curl {api_ca} https://localhost:8043/api", "APIVersions"),
+    ),
+    (
+        "kube-controller-manager",
+        True,
+        [
+            "--bind-address 127.0.0.1",
+            "--cluster-cidr",
+            PODS_CIDR,
+            "--service-cluster-ip-range",
+            SERVICES_CIDR,
+            "--cluster-signing-cert-file",
+            str(PKI / "ca.pem"),
+            "--cluster-signing-key-file",
+            str(PKI / "cakey.pem"),
+            "--kubeconfig",
+            str(KUBECONFIG),
+            "--tls-cert-file",
+            str(PKI / "controller-cert.pem"),
+            "--tls-private-key-file",
+            str(PKI / "controller-key.pem"),
+            "--service-account-private-key-file",
+            str(PKI / "sa-key.pem"),
+            "--root-ca-file",
+            str(PKI / "ca.pem"),
+            "--leader-elect=false",
+            "--use-service-account-credentials=true",
+            f"--v={VERBOSE}",
+        ],
+        [],
+        None,
+    ),
+    (
+        "kube-scheduler",
+        True,
+        [
+            "--kubeconfig",
+            str(KUBECONFIG),
+            f"--v={VERBOSE}",
+        ],
+        [],
+        ("/bin/kubectl get componentstatuses", "Healthy"),
+    ),
+    (
+        "kube-proxy",
+        True,
+        [
+            "--config",
+            str(CONF / "kube-proxy.yaml"),
+            f"--v={VERBOSE}",
+        ],
+        [
+            (
+                CONF / "kube-proxy.yaml",
+                dedent(
+                    """
           kind: KubeProxyConfiguration
           apiVersion: kubeproxy.config.k8s.io/v1alpha1
           clientConnection:
             kubeconfig: "%s"
           mode: "iptables"
           clusterCIDR: "%s"
-     """) % (str(KUBECONFIG), SERVICES_CIDR))]
-     , None),
-
-    ("kubelet", True,
-     [
-         "--config", str(CONF / "kubelet-config.yaml"),
-         "--root-dir", str(LOCAL / "kubelet"),
-         "--log-dir", str(RUN / "logs" / "kubelet-logs"),
-         "--cni-bin-dir=/usr/libexec/silverkube/cni/",
-         "--cni-conf-dir", str(CONF / "net.d"),
-         "--tls-cert-file", str(PKI / "kubelet-cert.pem"),
-         "--tls-private-key-file", str(PKI / "kubelet-key.pem"),
-         "--anonymous-auth=false",
-         "--client-ca-file", str(PKI / "ca.pem"),
-         "--container-runtime=remote",
-         "--container-runtime-endpoint", str(CRIOSOCK),
-         "--kubeconfig", str(KUBECONFIG),
-         "--register-node=true",
-         f"--v={VERBOSE}",
-     ] + ([
-         "--feature-gates",
-         "DevicePlugins=false,SupportNoneCgroupDriver=true",
-         "--cgroup-driver=none --cgroups-per-qos=false",
-         "--enforce-node-allocatable=''",
-         "--register-node=true",
-        ] if USERNETES else [])
-     , [(CONF / "kubelet-config.yaml", dedent("""
+     """
+                )
+                % (str(KUBECONFIG), SERVICES_CIDR),
+            )
+        ],
+        None,
+    ),
+    (
+        "kubelet",
+        True,
+        [
+            "--config",
+            str(CONF / "kubelet-config.yaml"),
+            "--root-dir",
+            str(LOCAL / "kubelet"),
+            "--log-dir",
+            str(RUN / "logs" / "kubelet-logs"),
+            "--cni-bin-dir=/usr/libexec/silverkube/cni/",
+            "--cni-conf-dir",
+            str(CONF / "net.d"),
+            "--tls-cert-file",
+            str(PKI / "kubelet-cert.pem"),
+            "--tls-private-key-file",
+            str(PKI / "kubelet-key.pem"),
+            "--anonymous-auth=false",
+            "--client-ca-file",
+            str(PKI / "ca.pem"),
+            "--container-runtime=remote",
+            "--container-runtime-endpoint",
+            str(CRIOSOCK),
+            "--kubeconfig",
+            str(KUBECONFIG),
+            "--register-node=true",
+            f"--v={VERBOSE}",
+        ]
+        + (
+            [
+                "--feature-gates",
+                "DevicePlugins=false,SupportNoneCgroupDriver=true",
+                "--cgroup-driver=none --cgroups-per-qos=false",
+                "--enforce-node-allocatable=''",
+                "--register-node=true",
+            ]
+            if USERNETES
+            else []
+        ),
+        [
+            (
+                CONF / "kubelet-config.yaml",
+                dedent(
+                    """
           kind: KubeletConfiguration
           apiVersion: kubelet.config.k8s.io/v1beta1
           authentication:
@@ -378,21 +487,46 @@ Services: List[Service] = [
           ImageMinimumGCAge: 100000m
           HighThresholdPercent: 100
           LowThresholdPercent: 0
-     """) % (str(PKI / "ca.pem"),
-             str(PKI / "kubelet-cert.pem"),
-             str(PKI / "kubelet-key.pem"),
-             KUBE_GATEWAY, PODS_CIDR))] + ([] if USERNETES else [
-                 (Path("/etc/systemd/system.conf.d/kubelet-cgroups.conf"), dedent("""
+     """
+                )
+                % (
+                    str(PKI / "ca.pem"),
+                    str(PKI / "kubelet-cert.pem"),
+                    str(PKI / "kubelet-key.pem"),
+                    KUBE_GATEWAY,
+                    PODS_CIDR,
+                ),
+            )
+        ]
+        + (
+            []
+            if USERNETES
+            else [
+                (
+                    Path("/etc/systemd/system.conf.d/kubelet-cgroups.conf"),
+                    dedent(
+                        """
           # Turning on Accounting helps track down performance issues.
           [Manager]
           DefaultCPUAccounting=yes
           DefaultMemoryAccounting=yes
           DefaultBlockIOAccounting=yes
-                 """))])
-     , ("/bin/kubectl get nodes", "Ready")),
-
-    ("coredns", True, ["--conf", str(CONF / "Corefile")]
-     , [(CONF / "Corefile", dedent("""
+                 """
+                    ),
+                )
+            ]
+        ),
+        ("/bin/kubectl get nodes", "Ready"),
+    ),
+    (
+        "coredns",
+        True,
+        ["--conf", str(CONF / "Corefile")],
+        [
+            (
+                CONF / "Corefile",
+                dedent(
+                    """
           .:53 {
               kubernetes cluster.local silverkube {
                 kubeconfig %s local
@@ -401,8 +535,13 @@ Services: List[Service] = [
               forward . /etc/resolv.conf
               cache 30
           }
-     """ % str(CONF / "kubeconfig")))]
-     , None),
+     """
+                    % str(CONF / "kubeconfig")
+                ),
+            )
+        ],
+        None,
+    ),
     # coredns check requires bridge (f"dig @{KUBE_GATEWAY} ns.dns.cluster.local +noall +answer", "10.42.0.1")),
 ]
 
@@ -416,38 +555,69 @@ def execute(args: List[str]) -> None:
 def pread(args: List[str]) -> Tuple[str, str]:
     p = Popen(args, stdout=PIPE, stderr=PIPE)
     stdout, stderr = p.communicate()
-    return stdout.decode('utf-8'), stderr.decode('utf-8')
+    return stdout.decode("utf-8"), stderr.decode("utf-8")
 
 
 def b64(data: str) -> str:
-    return b64encode(data.encode('utf-8')).decode('utf-8')
+    return b64encode(data.encode("utf-8")).decode("utf-8")
 
 
 def generate_cert(name) -> None:
-    key = (PKI / (name + "-key.pem"))
-    req = (PKI / (name + "-cert.req"))
-    crt = (PKI / (name + "-cert.pem"))
+    key = PKI / (name + "-key.pem")
+    req = PKI / (name + "-cert.req")
+    crt = PKI / (name + "-cert.pem")
     if not key.exists():
-        execute(
-            ["openssl", "genrsa", "-out", str(key), "2048"])
+        execute(["openssl", "genrsa", "-out", str(key), "2048"])
     if not req.exists():
         execute(
-            ["openssl", "req", "-new", "-subj",
-             "/C=FR/O=SoftwareFactory/CN=localhost",
-             "-extensions", "v3_req", "-config", str(PKI / "ca.cnf"),
-             "-key", str(key), "-out", str(req)])
+            [
+                "openssl",
+                "req",
+                "-new",
+                "-subj",
+                "/C=FR/O=SoftwareFactory/CN=localhost",
+                "-extensions",
+                "v3_req",
+                "-config",
+                str(PKI / "ca.cnf"),
+                "-key",
+                str(key),
+                "-out",
+                str(req),
+            ]
+        )
     if not crt.exists():
         execute(
-            ["openssl", "x509", "-req", "-days", "365", "-sha256",
-             "-extensions", "v3_req", "-extfile", str(PKI / "ca.cnf"),
-             "-CA", str(PKI / "ca.pem"), "-CAkey", str(PKI / "cakey.pem"),
-             "-CAserial", str(PKI / "ca.srl"),
-             "-in", str(req), "-out", str(crt)])
+            [
+                "openssl",
+                "x509",
+                "-req",
+                "-days",
+                "365",
+                "-sha256",
+                "-extensions",
+                "v3_req",
+                "-extfile",
+                str(PKI / "ca.cnf"),
+                "-CA",
+                str(PKI / "ca.pem"),
+                "-CAkey",
+                str(PKI / "cakey.pem"),
+                "-CAserial",
+                str(PKI / "ca.srl"),
+                "-in",
+                str(req),
+                "-out",
+                str(crt),
+            ]
+        )
 
 
 def generate_certs() -> str:
     PKI.mkdir(parents=True, exist_ok=True)
-    (PKI / "ca.cnf").write_text(dedent("""
+    (PKI / "ca.cnf").write_text(
+        dedent(
+            """
       [req]
       req_extensions = v3_req
       distinguished_name = req_distinguished_name
@@ -462,20 +632,38 @@ def generate_certs() -> str:
       DNS.1 = localhost
       IP.1 = %s
       IP.2 = %s
-    """ % (KUBE_ENDPOINT, KUBE_GATEWAY)))
+    """
+            % (KUBE_ENDPOINT, KUBE_GATEWAY)
+        )
+    )
     (PKI / "ca.srl").write_text("00\n")
     if not (PKI / "cakey.pem").exists():
-        execute(["openssl", "req", "-nodes", "-days", "3650", "-new",
-                 "-x509", "-subj", "/C=FR/O=SilverKube/OU=42",
-                 "-keyout", str(PKI / "cakey.pem"),
-                 "-out", str(PKI / "ca.pem")])
+        execute(
+            [
+                "openssl",
+                "req",
+                "-nodes",
+                "-days",
+                "3650",
+                "-new",
+                "-x509",
+                "-subj",
+                "/C=FR/O=SilverKube/OU=42",
+                "-keyout",
+                str(PKI / "cakey.pem"),
+                "-out",
+                str(PKI / "ca.pem"),
+            ]
+        )
     for i in ("etcd", "sa", "api", "kubelet", "controller", "crio"):
         generate_cert(i)
     return (PKI / "ca.pem").read_text()
 
 
 def generate_kubeconfig(ca: str) -> None:
-    KUBECONFIG.write_text(dedent("""
+    KUBECONFIG.write_text(
+        dedent(
+            """
         apiVersion: v1
         kind: Config
         preferences: {}
@@ -495,12 +683,20 @@ def generate_kubeconfig(ca: str) -> None:
             user: local
           name: local
         current-context: local
-    """)[1:] % (ca, b64((PKI / "sa-key.pem").read_text()),
-                b64((PKI / "sa-cert.pem").read_text())))
+    """
+        )[1:]
+        % (
+            ca,
+            b64((PKI / "sa-key.pem").read_text()),
+            b64((PKI / "sa-cert.pem").read_text()),
+        )
+    )
 
 
 def generate_policy() -> None:
-    (CONF / "policy.yaml").write_text(dedent("""
+    (CONF / "policy.yaml").write_text(
+        dedent(
+            """
         apiVersion: policy/v1beta1
         kind: PodSecurityPolicy
         metadata:
@@ -698,7 +894,9 @@ def generate_policy() -> None:
           kind: Role
           name: silverkube-role
           apiGroup: "rbac.authorization.k8s.io"
-    """)[1:])
+    """
+        )[1:]
+    )
 
 
 def setup_service(name: str, args: List[Command]) -> None:
@@ -716,7 +914,9 @@ def setup_service(name: str, args: List[Command]) -> None:
     command = command_name + " " + " ".join(args)
     unit = SYSTEMD / ("silverkube-" + name + ".service")
     unit.parent.mkdir(parents=True, exist_ok=True)
-    unit.write_text(dedent(f"""
+    unit.write_text(
+        dedent(
+            f"""
         [Unit]
         Description=Silverkube {name}
 
@@ -727,19 +927,31 @@ def setup_service(name: str, args: List[Command]) -> None:
 
         [Install]
         WantedBy=default.target
-        """)[1:])
+        """
+        )[1:]
+    )
 
 
 def generate_user_kubeconfig(ca) -> Path:
     execute(NSJOIN + ["/bin/kubectl", "apply", "-f", str(CONF / "policy.yaml")])
     print("Waiting for service account token")
     for retry in range(10):
-        token = b64decode(pread(NSJOIN + [
-            "/bin/kubectl", "-n", "silverkube", "get", "secrets", "-o",
-            "jsonpath={.items[?(@.metadata.annotations"
-            "['kubernetes\\.io/service-account\\.name']=='default')]"
-            ".data.token}"
-        ])[0].encode('utf-8')).decode('utf-8')
+        token = b64decode(
+            pread(
+                NSJOIN
+                + [
+                    "/bin/kubectl",
+                    "-n",
+                    "silverkube",
+                    "get",
+                    "secrets",
+                    "-o",
+                    "jsonpath={.items[?(@.metadata.annotations"
+                    "['kubernetes\\.io/service-account\\.name']=='default')]"
+                    ".data.token}",
+                ]
+            )[0].encode("utf-8")
+        ).decode("utf-8")
         if token:
             break
         sleep(1)
@@ -748,9 +960,16 @@ def generate_user_kubeconfig(ca) -> Path:
     if USERNETES:
         kube_config_user = CONF / "kubeconfig.user"
     else:
-        kube_config_user = Path("/home") / \
-            environ["SUDO_USER"] / ".config" / "silverkube" / "kubeconfig"
-    kube_config_user.write_text(dedent("""
+        kube_config_user = (
+            Path("/home")
+            / environ["SUDO_USER"]
+            / ".config"
+            / "silverkube"
+            / "kubeconfig"
+        )
+    kube_config_user.write_text(
+        dedent(
+            """
         apiVersion: v1
         kind: Config
         preferences: {}
@@ -770,7 +989,10 @@ def generate_user_kubeconfig(ca) -> Path:
             namespace: silverkube
           name: local
         current-context: local
-    """)[1:] % (ca, token))
+    """
+        )[1:]
+        % (ca, token)
+    )
     return kube_config_user
 
 
@@ -785,19 +1007,21 @@ def generate_pvs():
         path.mkdir(parents=True, exist_ok=True)
         chown(str(path), 1000, 1000)
         execute(["chcon", "system_u:object_r:container_file_t:s0", str(path)])
-        pvs.append(dict(
-            apiVersion="v1",
-            kind="PersistentVolume",
-            metadata=dict(name=f"sk-pv{pv}"),
-            spec=dict(
-                capacity=dict(storage="30Gi"),
-                accessModes=["ReadWriteOnce"],
-                hostPath=dict(path=str(path)))))
-    (CONF / "pvs.yaml").write_text(json_dumps(dict(
-        apiVersion="v1",
-        kind="List",
-        items=pvs
-    )))
+        pvs.append(
+            dict(
+                apiVersion="v1",
+                kind="PersistentVolume",
+                metadata=dict(name=f"sk-pv{pv}"),
+                spec=dict(
+                    capacity=dict(storage="30Gi"),
+                    accessModes=["ReadWriteOnce"],
+                    hostPath=dict(path=str(path)),
+                ),
+            )
+        )
+    (CONF / "pvs.yaml").write_text(
+        json_dumps(dict(apiVersion="v1", kind="List", items=pvs))
+    )
     execute(NSJOIN + ["/bin/kubectl", "apply", "-f", str(CONF / "pvs.yaml")])
 
 
@@ -812,8 +1036,7 @@ def up() -> int:
         for fpath, fcontent in files:
             fcontent = fcontent.strip() + "\n"
             fpath.parent.mkdir(parents=True, exist_ok=True)
-            if (fpath.exists() and fpath.read_text() != fcontent) \
-               or not fpath.exists():
+            if (fpath.exists() and fpath.read_text() != fcontent) or not fpath.exists():
                 fpath.write_text(fcontent)
                 if fcontent.startswith("#!/bin"):
                     fpath.chmod(0o755)
@@ -841,21 +1064,21 @@ def up() -> int:
                 res = pread(NSJOIN + check[0].split())
                 if check[1] in res[0]:
                     break
-                print(".", end='')
+                print(".", end="")
                 sleep(2)
             else:
                 print(res)
                 raise RuntimeError(f"Fail to check {name}")
     print("up!")
     generate_pvs()
-# disable psp for now
-#    generate_policy()
-#    kube_config_user = generate_user_kubeconfig(ca)
+    # disable psp for now
+    #    generate_policy()
+    #    kube_config_user = generate_user_kubeconfig(ca)
     kube_config_user = KUBECONFIG
     if USERNETES:
-        kubectl = f'{RKJOIN} kubectl'
+        kubectl = f"{RKJOIN} kubectl"
     else:
-        kubectl = 'kubectl'
+        kubectl = "kubectl"
     print(f"alias kubectl='{kubectl} --kubeconfig {kube_config_user}'")
     return 0
 
@@ -877,13 +1100,28 @@ def down() -> int:
     print("down!")
     try:
         if not USERNETES:
-            execute(["/usr/libexec/silverkube/hyperkube",
-                     "kube-proxy", "--cleanup", "--cleanup-ipvs", "--config", str(CONF / "kube-proxy.yaml")])
+            execute(
+                [
+                    "/usr/libexec/silverkube/hyperkube",
+                    "kube-proxy",
+                    "--cleanup",
+                    "--cleanup-ipvs",
+                    "--config",
+                    str(CONF / "kube-proxy.yaml"),
+                ]
+            )
     except RuntimeError:
         pass
     if "silverkube" in Path("/proc/mounts").read_text():
         try:
-            execute(["sudo", "sh", "-c", "umount $(grep silverkube /proc/mounts  | awk '{ print $2 }')"])
+            execute(
+                [
+                    "sudo",
+                    "sh",
+                    "-c",
+                    "umount $(grep silverkube /proc/mounts  | awk '{ print $2 }')",
+                ]
+            )
         except RuntimeError:
             pass
     execute(["rm", "-Rf", str(RUN)])

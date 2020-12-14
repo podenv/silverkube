@@ -67,8 +67,7 @@ def clone(url: str, commit: str) -> Path:
         dest.mkdir(parents=True, exist_ok=True)
         execute(["git", "clone", url, str(dest)])
     try:
-        execute(["git", "checkout", commit],
-                dest)
+        execute(["git", "checkout", commit], dest)
     except Exception:
         execute(["git", "fetch", "origin"], dest)
         execute(["git", "checkout", commit], dest)
@@ -78,25 +77,45 @@ def clone(url: str, commit: str) -> Path:
 
 def build_rootless() -> List[Path]:
     print("Building rootlesskit")
-    git = clone("https://github.com/rootless-containers/rootlesskit",
-                ROOTLESSKIT_COMMIT)
+    git = clone(
+        "https://github.com/rootless-containers/rootlesskit", ROOTLESSKIT_COMMIT
+    )
     rkit = git / "rootlesskit"
     rctl = git / "rootlessctl"
     if not rkit.exists():
-        execute(["env", "CGO_ENABLED=0", "go", "build", "-o", str(rkit),
-                 "github.com/rootless-containers/rootlesskit/cmd/rootlesskit"],
-                git)
+        execute(
+            [
+                "env",
+                "CGO_ENABLED=0",
+                "go",
+                "build",
+                "-o",
+                str(rkit),
+                "github.com/rootless-containers/rootlesskit/cmd/rootlesskit",
+            ],
+            git,
+        )
     if not rctl.exists():
-        execute(["env", "CGO_ENABLED=0", "go", "build", "-o", str(rctl),
-                 "github.com/rootless-containers/rootlesskit/cmd/rootlessctl"],
-                git)
+        execute(
+            [
+                "env",
+                "CGO_ENABLED=0",
+                "go",
+                "build",
+                "-o",
+                str(rctl),
+                "github.com/rootless-containers/rootlesskit/cmd/rootlessctl",
+            ],
+            git,
+        )
     return [rkit, rctl]
 
 
 def build_slirp() -> List[Path]:
     print("Building slirp4netns")
-    git = clone("https://github.com/rootless-containers/slirp4netns",
-                SLIRP4NETNS_COMMIT)
+    git = clone(
+        "https://github.com/rootless-containers/slirp4netns", SLIRP4NETNS_COMMIT
+    )
     slirp = git / "slirp4netns"
     if not slirp.exists():
         execute(["./autogen.sh"], git)
@@ -107,8 +126,7 @@ def build_slirp() -> List[Path]:
 
 def build_runc() -> List[Path]:
     print("Building runc")
-    git = clone("https://github.com/opencontainers/runc",
-                RUNC_COMMIT)
+    git = clone("https://github.com/opencontainers/runc", RUNC_COMMIT)
     runc = git / "runc"
     if not runc.exists():
         execute(["make", "BUILDTAGS=seccomp selinux"], git)
@@ -126,15 +144,13 @@ def build_crio() -> List[Path]:
     if not pinns.exists():
         execute(["make", "bin/pinns"], git)
     if not crictl.exists():
-        execute(["go", "get",
-                 "github.com/kubernetes-sigs/cri-tools/cmd/crictl"])
+        execute(["go", "get", "github.com/kubernetes-sigs/cri-tools/cmd/crictl"])
     return [crio, pinns, crictl]
 
 
 def build_conmon() -> List[Path]:
     print("Building conmon")
-    git = clone("https://github.com/containers/conmon",
-                CONMON_RELEASE)
+    git = clone("https://github.com/containers/conmon", CONMON_RELEASE)
     conmon = git / "bin" / "conmon"
     if not conmon.exists():
         execute(["make"], git)
@@ -143,8 +159,7 @@ def build_conmon() -> List[Path]:
 
 def build_cni() -> List[Path]:
     print("Building cni")
-    git = clone("https://github.com/containernetworking/plugins",
-                CNI_PLUGINS_COMMIT)
+    git = clone("https://github.com/containernetworking/plugins", CNI_PLUGINS_COMMIT)
     if not (git / "bin" / "portmap").exists():
         execute(["./build_linux.sh"], git)
     plugins = listdir(str(git / "bin"))
@@ -153,8 +168,7 @@ def build_cni() -> List[Path]:
 
 def build_coredns() -> List[Path]:
     print("Building coredns")
-    git = clone("https://github.com/coredns/coredns",
-                COREDNS_COMMIT)
+    git = clone("https://github.com/coredns/coredns", COREDNS_COMMIT)
     coredns = git / "coredns"
     if not coredns.exists():
         del environ["GOPATH"]
@@ -168,23 +182,43 @@ def build_kube() -> List[Path]:
     print("Building kube")
     bazel = Path("/usr/local/bin/bazel")
     if not bazel.exists():
-        execute(["sudo", "curl", "-Lo", "/usr/local/bin/bazel",
-                 f"https://github.com/bazelbuild/bazel/releases/download/"
-                 f"{BAZEL_RELEASE}/bazel-{BAZEL_RELEASE}-linux-x86_64"])
+        execute(
+            [
+                "sudo",
+                "curl",
+                "-Lo",
+                "/usr/local/bin/bazel",
+                f"https://github.com/bazelbuild/bazel/releases/download/"
+                f"{BAZEL_RELEASE}/bazel-{BAZEL_RELEASE}-linux-x86_64",
+            ]
+        )
         execute(["sudo", "chmod", "+x", str(bazel)])
-    git = clone("https://github.com/kubernetes/kubernetes",
-                KUBERNETES_COMMIT)
+    git = clone("https://github.com/kubernetes/kubernetes", KUBERNETES_COMMIT)
     kube = git / "bazel-bin" / "cmd" / "hyperkube" / "hyperkube"
     if not kube.exists():
         execute(["git", "config", "user.email", "nobody@example.com"], git)
         execute(["git", "config", "user.name", "Silverkube Build Script"], git)
-        patches = clone("https://github.com/rootless-containers/usernetes",
-                        "d58792bd5d4c56c4dda844ea119ee05a6b0d1808") / \
-            "src" / "patches" / "kubernetes"
+        patches = (
+            clone(
+                "https://github.com/rootless-containers/usernetes",
+                "d58792bd5d4c56c4dda844ea119ee05a6b0d1808",
+            )
+            / "src"
+            / "patches"
+            / "kubernetes"
+        )
         execute(["git", "am"] + glob(str(patches) + "/*"), git)
         execute(["git", "show", "--summary"], git)
-        execute(["env", "KUBE_GIT_VERSION=" + KUBE_GIT_VERSION,
-                 "bazel", "build", "cmd/hyperkube"], git)
+        execute(
+            [
+                "env",
+                "KUBE_GIT_VERSION=" + KUBE_GIT_VERSION,
+                "bazel",
+                "build",
+                "cmd/hyperkube",
+            ],
+            git,
+        )
     return [kube]
 
 
@@ -200,19 +234,43 @@ def build_etcd() -> List[Path]:
         # TODO: check hash
     path = SRC_DIR / f"etcd-{ETCD_RELEASE}-linux-amd64" / "etcd"
     if not path.exists():
-        execute(["tar", "-C", str(SRC_DIR), "-xzf", str(dest),
-                 "--no-same-owner"])
+        execute(["tar", "-C", str(SRC_DIR), "-xzf", str(dest), "--no-same-owner"])
     return [path]
 
 
-BuildReq = set([
-    "git", "curl", "rpm-build", "make", "btrfs-progs-devel", "which", "runc",
-    "autoconf", "automake", "libtool", "libcap-devel", "glibc-static",
-    "gcc", "gcc-c++",
-    "containers-common", "device-mapper-devel", "git", "glib2-devel",
-    "glibc-devel", "go", "gpgme-devel", "libassuan-devel",
-    "libgpg-error-devel", "libseccomp-devel", "libselinux-devel", "pkgconfig",
-    "bzip2", "selinux-policy", "selinux-policy-devel"])
+BuildReq = set(
+    [
+        "git",
+        "curl",
+        "rpm-build",
+        "make",
+        "btrfs-progs-devel",
+        "which",
+        "runc",
+        "autoconf",
+        "automake",
+        "libtool",
+        "libcap-devel",
+        "glibc-static",
+        "gcc",
+        "gcc-c++",
+        "containers-common",
+        "device-mapper-devel",
+        "git",
+        "glib2-devel",
+        "glibc-devel",
+        "go",
+        "gpgme-devel",
+        "libassuan-devel",
+        "libgpg-error-devel",
+        "libseccomp-devel",
+        "libselinux-devel",
+        "pkgconfig",
+        "bzip2",
+        "selinux-policy",
+        "selinux-policy-devel",
+    ]
+)
 
 
 def main():
@@ -220,14 +278,14 @@ def main():
     SOURCES_DIR.mkdir(exist_ok=True, parents=True)
     execute(["sudo", "dnf", "install", "-y"] + list(BuildReq))
     bins = (
-        build_rootless() +
-        build_slirp() +
-        build_runc() +
-        build_crio() +
-        build_conmon() +
-        build_coredns() +
-        build_kube() +
-        build_etcd()
+        build_rootless()
+        + build_slirp()
+        + build_runc()
+        + build_crio()
+        + build_conmon()
+        + build_coredns()
+        + build_kube()
+        + build_etcd()
     )
     cnis = build_cni()
 
@@ -248,50 +306,58 @@ def main():
         "Source2: silverkube.cil",
     ]
     for idx, source in zip(range(100, 1000), bins + cnis):
-        src_name = str(source).replace('/root/.cache/silverkube/', '')
+        src_name = str(source).replace("/root/.cache/silverkube/", "")
         specfile.append(f"Source{idx}: {src_name}")
 
-    specfile.extend([
-        "",
-        "%description",
-        "A kubernetes service for desktop",
-        "",
-        "%prep",
-        "",
-        "%build",
-        "",
-        "%install",
-        "install -p -D -m 0755 %{SOURCE1} %{buildroot}/bin/silverkube",
-        "install -p -D -m 0644 %{SOURCE2} "
-        "%{buildroot}/usr/share/silverkube/silverkube.cil",
-        "",
-    ])
+    specfile.extend(
+        [
+            "",
+            "%description",
+            "A kubernetes service for desktop",
+            "",
+            "%prep",
+            "",
+            "%build",
+            "",
+            "%install",
+            "install -p -D -m 0755 %{SOURCE1} %{buildroot}/bin/silverkube",
+            "install -p -D -m 0644 %{SOURCE2} "
+            "%{buildroot}/usr/share/silverkube/silverkube.cil",
+            "",
+        ]
+    )
 
     def sd(mode: str, path: str, srcs: List[Path]) -> List[Tuple[str, str]]:
         return list(map(lambda x: (mode, path + "/" + x.name), srcs))
 
     for idx, (mode, dest) in zip(
-            range(100, 1000),
-            sd("755", "usr/libexec/silverkube", bins) +
-            sd("755", "usr/libexec/silverkube/cni", cnis)):
+        range(100, 1000),
+        sd("755", "usr/libexec/silverkube", bins)
+        + sd("755", "usr/libexec/silverkube/cni", cnis),
+    ):
         specfile.append(
-            "install -p -D -m 0%s %%{SOURCE%d} %%{buildroot}/%s" % (
-                mode, idx, dest))
+            "install -p -D -m 0%s %%{SOURCE%d} %%{buildroot}/%s" % (mode, idx, dest)
+        )
 
-    specfile.extend([
-        "", "%post",
-        "chcon -v system_u:object_r:container_runtime_exec_t:s0 "
-        "/usr/libexec/silverkube/runc /usr/libexec/silverkube/crio",
-        "semodule -i /usr/share/silverkube/silverkube.cil "
-        "/usr/share/udica/templates/*.cil",
-        "", "%files",
-        "/bin/silverkube",
-        "/usr/libexec/silverkube",
-        "/usr/share/silverkube",
-        "", "%changelog",
-        "* Sat Sep 21 2019 Tristan Cacqueray <tdecacqu@redhat.com>",
-        "- Initial packaging"
-    ])
+    specfile.extend(
+        [
+            "",
+            "%post",
+            "chcon -v system_u:object_r:container_runtime_exec_t:s0 "
+            "/usr/libexec/silverkube/runc /usr/libexec/silverkube/crio",
+            "semodule -i /usr/share/silverkube/silverkube.cil "
+            "/usr/share/udica/templates/*.cil",
+            "",
+            "%files",
+            "/bin/silverkube",
+            "/usr/libexec/silverkube",
+            "/usr/share/silverkube",
+            "",
+            "%changelog",
+            "* Sat Sep 21 2019 Tristan Cacqueray <tdecacqu@redhat.com>",
+            "- Initial packaging",
+        ]
+    )
     Path("silverkube.spec").write_text("\n".join(specfile))
 
     for local in bins + cnis + [Path("silverkube.py"), Path("silverkube.cil")]:
@@ -299,9 +365,17 @@ def main():
         if not dest.exists():
             execute(["ln", "-sf", local.resolve(), str(dest)])
 
-    execute(["rpmbuild", "--define", "_sourcedir %s" % SOURCES_DIR.resolve(),
-             "--define", "_topdir %s" % Path('rpmbuild').resolve(),
-             "-ba", "silverkube.spec"])
+    execute(
+        [
+            "rpmbuild",
+            "--define",
+            "_sourcedir %s" % SOURCES_DIR.resolve(),
+            "--define",
+            "_topdir %s" % Path("rpmbuild").resolve(),
+            "-ba",
+            "silverkube.spec",
+        ]
+    )
 
 
 if __name__ == "__main__":
