@@ -8,3 +8,5 @@ spec:
     - name: test
       image: fedora
       command: ["/bin/sleep", "Inf"]
+      securityContext:
+        privileged: true

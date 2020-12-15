@@ -222,6 +222,7 @@ Services: List[Service] = [
           runtime_path = "/usr/libexec/silverkube/crun"
           runtime_type = "oci"
           runtime_root = "{RUN}/crun"
+          privileged_without_host_devices = true
 
           [crio.image]
           default_transport = "docker://"
@@ -936,7 +937,6 @@ def setup_service(name: str, args: List[Command]) -> None:
 
         [Service]
         Environment="PATH=/usr/libexec/silverkube/:/bin:/sbin"
-        Environment="_CRIO_ROOTLESS=1"
         SyslogIdentifier=silverkube-{name}
         ExecStart={command}
 
