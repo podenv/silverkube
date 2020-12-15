@@ -460,6 +460,8 @@ Services: List[Service] = [
             "--kubeconfig",
             str(KUBECONFIG),
             "--register-node=true",
+            "--fail-swap-on=false",
+            "--cgroups-per-qos=true",
             f"--v={VERBOSE}",
         ]
         + (
