@@ -143,7 +143,7 @@ Services: List[Service] = [
             mkdir -p $src
             mount --bind $src $dst
           done
-          rm -f /run/xtables.lock
+          rm -f /run/xtables.lock /run/flannel /run/netns /run/ipcns /run/utsns /run/crun /run/crio
           touch $XDG_RUNTIME_DIR/silverkube/rk/ready
           exec /bin/sleep infinity
      """
@@ -461,14 +461,13 @@ Services: List[Service] = [
             str(KUBECONFIG),
             "--register-node=true",
             "--fail-swap-on=false",
-            "--cgroups-per-qos=true",
+            "--enforce-node-allocatable=''",
             f"--v={VERBOSE}",
         ]
         + (
             [
                 "--feature-gates",
                 "DevicePlugins=false",
-                "--enforce-node-allocatable=''",
                 "--register-node=true",
             ]
             if USERNETES
@@ -1121,7 +1120,6 @@ def down() -> int:
                 [
                     "/usr/libexec/silverkube/kube-proxy",
                     "--cleanup",
-                    "--cleanup-ipvs",
                     "--config",
                     str(CONF / "kube-proxy.yaml"),
                 ]

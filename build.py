@@ -324,7 +324,7 @@ def main():
         "Release: 1%{?dist}",
         "Summary: A kubernetes service for desktop",
         "",
-        "Requires: iptables, ipset, conntrack-tools, containers-common, kubernetes-client",
+        "Requires: iptables, ipset, conntrack-tools, containers-common, kubernetes-client, openssl",
         "Requires(post): udica",
         "Requires(post): coreutils",
         "",
