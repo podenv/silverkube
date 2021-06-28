@@ -373,7 +373,7 @@ def main():
             "",
             "%post",
             "chcon -v system_u:object_r:container_runtime_exec_t:s0 "
-            "/usr/libexec/silverkube/runc /usr/libexec/silverkube/crio",
+            "/usr/libexec/silverkube/crio",
             "semodule -i /usr/share/silverkube/silverkube.cil "
             "/usr/share/udica/templates/*.cil",
             "",

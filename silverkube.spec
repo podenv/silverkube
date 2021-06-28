@@ -88,7 +88,7 @@ install -p -D -m 0755 %{SOURCE129} %{buildroot}/usr/libexec/silverkube/cni/tunin
 install -p -D -m 0755 %{SOURCE130} %{buildroot}/usr/libexec/silverkube/cni/vlan
 
 %post
-chcon -v system_u:object_r:container_runtime_exec_t:s0 /usr/libexec/silverkube/runc /usr/libexec/silverkube/crio
+chcon -v system_u:object_r:container_runtime_exec_t:s0 /usr/libexec/silverkube/crio
 semodule -i /usr/share/silverkube/silverkube.cil /usr/share/udica/templates/*.cil
 
 %files
