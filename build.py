@@ -320,7 +320,7 @@ def main():
 
     specfile = [
         "Name: silverkube",
-        "Version: 0.1.0",
+        "Version: 0.2.0",
         "Release: 1%{?dist}",
         "Summary: A kubernetes service for desktop",
         "",
@@ -385,6 +385,7 @@ def main():
             "%changelog",
             "* Mon Dec 14 2020 Tristan Cacqueray <tdecacqu@redhat.com>",
             "- Initial packaging",
+            ""
         ]
     )
     Path("silverkube.spec").write_text("\n".join(specfile))

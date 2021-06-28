@@ -27,6 +27,8 @@ python3 build.py
 
 ```shell
 mkdir -p ~/.cache/silverkube
+# ensure bazel symlink points to the container user home cache
+rm -f ~/.cache/silverkube/src/github.com/kubernetes/kubernetes/bazel-*
 podman run --rm -it \
   -v $HOME/.cache/silverkube:/root/.cache/silverkube:Z \
   -v $(pwd):/data:Z --workdir /data \
