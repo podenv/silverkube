@@ -11,7 +11,7 @@ use at your own risk.
 
 ## Install
 
-- On a fedora-33 system, install the pre-built package:
+- On a fedora-36 system, install the pre-built package:
 
 ```shell
 sudo dnf install -y $SILVERKUBE_RPM_RELEASE_URL
@@ -27,8 +27,6 @@ python3 build.py
 
 ```shell
 mkdir -p ~/.cache/silverkube
-# ensure bazel symlink points to the container user home cache
-rm -f ~/.cache/silverkube/src/github.com/kubernetes/kubernetes/bazel-*
 podman run --rm -it \
   -v $HOME/.cache/silverkube:/root/.cache/silverkube:Z \
   -v $(pwd):/data:Z --workdir /data \
@@ -36,6 +34,8 @@ podman run --rm -it \
 ```
 
 ## Usage
+
+- Make sure the hostname resolve to localhost, and run `systemctl stop systemd-resolved`
 
 - Start the services rootless
 

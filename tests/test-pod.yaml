@@ -6,7 +6,7 @@ spec:
   restartPolicy: Never
   containers:
     - name: test
-      image: fedora
+      image: registry.fedoraproject.org/fedora:36
       command: ["/bin/sleep", "Inf"]
       securityContext:
         privileged: true

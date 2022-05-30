@@ -1,5 +1,5 @@
 Name: silverkube
-Version: 0.2.0
+Version: 0.3.0
 Release: 1%{?dist}
 Summary: A kubernetes service for desktop
 
@@ -21,28 +21,28 @@ Source105: src/github.com/cri-o/cri-o/bin/pinns
 Source106: bin/crictl
 Source107: src/github.com/containers/conmon/bin/conmon
 Source108: src/github.com/coredns/coredns/coredns
-Source109: src/github.com/kubernetes/kubernetes/bazel-out/k8-fastbuild/bin/cmd/kubelet/kubelet_/kubelet
-Source110: src/github.com/kubernetes/kubernetes/bazel-out/k8-fastbuild-ST-4c64f0b3d5c7/bin/cmd/kube-apiserver/kube-apiserver_/kube-apiserver
-Source111: src/github.com/kubernetes/kubernetes/bazel-out/k8-fastbuild-ST-4c64f0b3d5c7/bin/cmd/kube-controller-manager/kube-controller-manager_/kube-controller-manager
-Source112: src/github.com/kubernetes/kubernetes/bazel-out/k8-fastbuild-ST-4c64f0b3d5c7/bin/cmd/kube-scheduler/kube-scheduler_/kube-scheduler
-Source113: src/github.com/kubernetes/kubernetes/bazel-out/k8-fastbuild-ST-4c64f0b3d5c7/bin/cmd/kube-proxy/kube-proxy_/kube-proxy
+Source109: src/github.com/kubernetes/kubernetes/_output/bin/kubelet
+Source110: src/github.com/kubernetes/kubernetes/_output/bin/kube-apiserver
+Source111: src/github.com/kubernetes/kubernetes/_output/bin/kube-controller-manager
+Source112: src/github.com/kubernetes/kubernetes/_output/bin/kube-scheduler
+Source113: src/github.com/kubernetes/kubernetes/_output/bin/kube-proxy
 Source114: src/etcd-v3.4.14-linux-amd64/etcd
 Source115: src/github.com/containernetworking/plugins/bin/bandwidth
 Source116: src/github.com/containernetworking/plugins/bin/bridge
 Source117: src/github.com/containernetworking/plugins/bin/dhcp
 Source118: src/github.com/containernetworking/plugins/bin/firewall
-Source119: src/github.com/containernetworking/plugins/bin/flannel
-Source120: src/github.com/containernetworking/plugins/bin/host-device
-Source121: src/github.com/containernetworking/plugins/bin/host-local
-Source122: src/github.com/containernetworking/plugins/bin/ipvlan
-Source123: src/github.com/containernetworking/plugins/bin/loopback
-Source124: src/github.com/containernetworking/plugins/bin/macvlan
-Source125: src/github.com/containernetworking/plugins/bin/portmap
-Source126: src/github.com/containernetworking/plugins/bin/ptp
-Source127: src/github.com/containernetworking/plugins/bin/sbr
-Source128: src/github.com/containernetworking/plugins/bin/static
-Source129: src/github.com/containernetworking/plugins/bin/tuning
-Source130: src/github.com/containernetworking/plugins/bin/vlan
+Source119: src/github.com/containernetworking/plugins/bin/host-device
+Source120: src/github.com/containernetworking/plugins/bin/host-local
+Source121: src/github.com/containernetworking/plugins/bin/ipvlan
+Source122: src/github.com/containernetworking/plugins/bin/loopback
+Source123: src/github.com/containernetworking/plugins/bin/macvlan
+Source124: src/github.com/containernetworking/plugins/bin/portmap
+Source125: src/github.com/containernetworking/plugins/bin/ptp
+Source126: src/github.com/containernetworking/plugins/bin/sbr
+Source127: src/github.com/containernetworking/plugins/bin/static
+Source128: src/github.com/containernetworking/plugins/bin/tuning
+Source129: src/github.com/containernetworking/plugins/bin/vlan
+Source130: src/github.com/containernetworking/plugins/bin/vrf
 
 %description
 A kubernetes service for desktop
@@ -74,18 +74,18 @@ install -p -D -m 0755 %{SOURCE115} %{buildroot}/usr/libexec/silverkube/cni/bandw
 install -p -D -m 0755 %{SOURCE116} %{buildroot}/usr/libexec/silverkube/cni/bridge
 install -p -D -m 0755 %{SOURCE117} %{buildroot}/usr/libexec/silverkube/cni/dhcp
 install -p -D -m 0755 %{SOURCE118} %{buildroot}/usr/libexec/silverkube/cni/firewall
-install -p -D -m 0755 %{SOURCE119} %{buildroot}/usr/libexec/silverkube/cni/flannel
-install -p -D -m 0755 %{SOURCE120} %{buildroot}/usr/libexec/silverkube/cni/host-device
-install -p -D -m 0755 %{SOURCE121} %{buildroot}/usr/libexec/silverkube/cni/host-local
-install -p -D -m 0755 %{SOURCE122} %{buildroot}/usr/libexec/silverkube/cni/ipvlan
-install -p -D -m 0755 %{SOURCE123} %{buildroot}/usr/libexec/silverkube/cni/loopback
-install -p -D -m 0755 %{SOURCE124} %{buildroot}/usr/libexec/silverkube/cni/macvlan
-install -p -D -m 0755 %{SOURCE125} %{buildroot}/usr/libexec/silverkube/cni/portmap
-install -p -D -m 0755 %{SOURCE126} %{buildroot}/usr/libexec/silverkube/cni/ptp
-install -p -D -m 0755 %{SOURCE127} %{buildroot}/usr/libexec/silverkube/cni/sbr
-install -p -D -m 0755 %{SOURCE128} %{buildroot}/usr/libexec/silverkube/cni/static
-install -p -D -m 0755 %{SOURCE129} %{buildroot}/usr/libexec/silverkube/cni/tuning
-install -p -D -m 0755 %{SOURCE130} %{buildroot}/usr/libexec/silverkube/cni/vlan
+install -p -D -m 0755 %{SOURCE119} %{buildroot}/usr/libexec/silverkube/cni/host-device
+install -p -D -m 0755 %{SOURCE120} %{buildroot}/usr/libexec/silverkube/cni/host-local
+install -p -D -m 0755 %{SOURCE121} %{buildroot}/usr/libexec/silverkube/cni/ipvlan
+install -p -D -m 0755 %{SOURCE122} %{buildroot}/usr/libexec/silverkube/cni/loopback
+install -p -D -m 0755 %{SOURCE123} %{buildroot}/usr/libexec/silverkube/cni/macvlan
+install -p -D -m 0755 %{SOURCE124} %{buildroot}/usr/libexec/silverkube/cni/portmap
+install -p -D -m 0755 %{SOURCE125} %{buildroot}/usr/libexec/silverkube/cni/ptp
+install -p -D -m 0755 %{SOURCE126} %{buildroot}/usr/libexec/silverkube/cni/sbr
+install -p -D -m 0755 %{SOURCE127} %{buildroot}/usr/libexec/silverkube/cni/static
+install -p -D -m 0755 %{SOURCE128} %{buildroot}/usr/libexec/silverkube/cni/tuning
+install -p -D -m 0755 %{SOURCE129} %{buildroot}/usr/libexec/silverkube/cni/vlan
+install -p -D -m 0755 %{SOURCE130} %{buildroot}/usr/libexec/silverkube/cni/vrf
 
 %post
 chcon -v system_u:object_r:container_runtime_exec_t:s0 /usr/libexec/silverkube/crio

@@ -32,19 +32,20 @@ BIN_DIR = BASE_DIR / "bin"
 
 environ["GOPATH"] = str(BASE_DIR)
 
-USERNETES_COMMIT = "534df949509da0bfbb9e036688bded3e03533ec2"
-ROOTLESSKIT_COMMIT = "7d4b61b7e0939e63d2d550139ee0ee0a96081b07"
-CRIO_COMMIT = "4dff9dd17d3d27046b3261bd5688581c421334a9"
-KUBERNETES_COMMIT = "v1.21.0-alpha.0"
+USERNETES_COMMIT = "09d803c87646985ac371f1369ad03d2f9d46e896"
+# Copy the pins from https://github.com/rootless-containers/usernetes/blob/master/Dockerfile
+ROOTLESSKIT_COMMIT = "c5f0bd3d3d59768c1d3416ef09a6ddb6f0e1e0fb"
+CRIO_COMMIT = "c62a882c54233630e14afddd25c014ebce413f88"
+KUBERNETES_COMMIT = "v1.24.0"
 SLIRP4NETNS_COMMIT = "v1.1.8"
-CRUN_COMMIT = "0.16"
-CNI_PLUGINS_COMMIT = "v0.8.7"
-CONMON_RELEASE = "v2.0.21"
+CRUN_COMMIT = "1.4.5"
+CNI_PLUGINS_COMMIT = "v1.1.1"
+CONMON_RELEASE = "v2.1.0"
 COREDNS_COMMIT = "v1.8.0"
-KUBE_GIT_VERSION = "v1.21.0-usernetes"
+KUBE_GIT_VERSION = f"{KUBERNETES_COMMIT}-usernetes"
 
+CRICTL_VERSION = "v1.24.1"
 ETCD_RELEASE = "v3.4.14"
-BAZEL_RELEASE = "3.7.1"
 
 
 def execute(args: List[str], cwd: Path = Path(".")) -> None:
@@ -137,7 +138,8 @@ def build_crio() -> List[Path]:
     if not pinns.exists():
         execute(["make", "bin/pinns"], git)
     if not crictl.exists():
-        execute(["go", "get", "github.com/kubernetes-sigs/cri-tools/cmd/crictl"])
+        execute(["curl", "-Lo", "crictl.tar.gz", f"https://github.com/kubernetes-sigs/cri-tools/releases/download/{CRICTL_VERSION}/crictl-{CRICTL_VERSION}-linux-amd64.tar.gz"], BASE_DIR)
+        execute(["tar", "zxvf", "crictl.tar.gz", "-C", str(BIN_DIR)], BASE_DIR)
     return [crio, pinns, crictl]
 
 
@@ -173,19 +175,6 @@ def build_coredns() -> List[Path]:
 
 def build_kube() -> List[Path]:
     print("Building kube")
-    bazel = Path("/usr/local/bin/bazel")
-    if not bazel.exists():
-        execute(
-            [
-                "sudo",
-                "curl",
-                "-Lo",
-                "/usr/local/bin/bazel",
-                f"https://github.com/bazelbuild/bazel/releases/download/"
-                f"{BAZEL_RELEASE}/bazel-{BAZEL_RELEASE}-linux-x86_64",
-            ]
-        )
-        execute(["sudo", "chmod", "+x", str(bazel)])
     git = clone("https://github.com/kubernetes/kubernetes", KUBERNETES_COMMIT)
     cmds = ["kubelet"] + list(
         map(
@@ -194,58 +183,12 @@ def build_kube() -> List[Path]:
         )
     )
 
-    def get_kubes():
-        try:
-            return list(
-                map(
-                    lambda cmd: Path(
-                        glob(
-                            str(
-                                git
-                                / "bazel-out"
-                                / "k8-fastbuild*"
-                                / "bin"
-                                / "cmd"
-                                / cmd
-                                / (cmd + "_")
-                                / cmd
-                            )
-                        )[0]
-                    ),
-                    cmds,
-                )
-            )
-        except IndexError:
-            return []
-
-    kubes = get_kubes()
-    if not kubes or not all(map(lambda kube: kube.exists(), kubes)):
-        execute(["git", "config", "user.email", "nobody@example.com"], git)
-        execute(["git", "config", "user.name", "Silverkube Build Script"], git)
-        patches = (
-            clone(
-                "https://github.com/rootless-containers/usernetes",
-                USERNETES_COMMIT,
-            )
-            / "src"
-            / "patches"
-            / "kubernetes"
-        )
-        execute(["git", "am"] + glob(str(patches) + "/*"), git)
-        execute(["git", "show", "--summary"], git)
-        execute(
-            [
-                "env",
-                "KUBE_GIT_VERSION=" + KUBE_GIT_VERSION,
-                "bazel",
-                "build",
-            ]
-            + list(map(lambda cmd: "cmd/" + cmd, cmds)),
-            git,
-        )
-        kubes = get_kubes()
-        if not kubes:
-            raise RuntimeError("Couldn't find:" + cmds)
+    kubes = []
+    for cmd in cmds:
+        kube = git / "_output" / "bin" / cmd
+        if not kube.exists():
+            execute(["make", "WHAT=cmd/" + cmd], git)
+        kubes.append(kube)
     return kubes
 
 
@@ -304,6 +247,7 @@ BuildReq = set(
 
 def main():
     SRC_DIR.mkdir(exist_ok=True, parents=True)
+    BIN_DIR.mkdir(exist_ok=True, parents=True)
     SOURCES_DIR.mkdir(exist_ok=True, parents=True)
     execute(["sudo", "dnf", "install", "-y"] + list(BuildReq))
     bins = (
@@ -320,7 +264,7 @@ def main():
 
     specfile = [
         "Name: silverkube",
-        "Version: 0.2.0",
+        "Version: 0.3.0",
         "Release: 1%{?dist}",
         "Summary: A kubernetes service for desktop",
         "",

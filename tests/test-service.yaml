@@ -48,7 +48,7 @@ items:
           name: postgres
         spec:
           containers:
-            - image: docker.io/library/postgres:12.1
+            - image: quay.io/coreos/postgres
               name: postgres
               ports:
                 - containerPort: 5432
@@ -84,6 +84,6 @@ items:
                 - sh
                 - "-c"
                 - "python3 -c 'import socket, sys; socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((sys.argv[1], 5432))' postgres;echo Connected; sleep infinity"
-              image: registry.fedoraproject.org/fedora:31
+              image: registry.fedoraproject.org/fedora:36
               name: worker
 kind: List
