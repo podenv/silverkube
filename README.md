@@ -9,6 +9,11 @@ a desktop workstation:
 This process is pretty much an experimental work in progress,
 use at your own risk.
 
+Note that running the display server in a kubernetes pod presently
+does not work rootless. It seems like systemd-login does some
+magic to authorize this, and it is not clear if and how that can
+be forwarded to the kubelet context.
+
 ## Install
 
 - On a fedora-36 system, install the pre-built package:
