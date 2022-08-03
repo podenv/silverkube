@@ -165,7 +165,7 @@ Services: List[Service] = [
           log_dir = "{LOGS}/crio-pods"
           root = "{STORAGE}"
           runroot = "{CRIO_RUNROOT}"
-          storage_driver = "vfs"
+          storage_driver = "overlay"
           storage_option = []
           version_file = "{RUN}/crio-version"
 
@@ -492,9 +492,9 @@ Services: List[Service] = [
           clusterDomain: "cluster.local"
           clusterDNS:
             - "%s"
+          localStorageCapacityIsolation: false
           featureGates:
             DevicePlugins: false
-            LocalStorageCapacityIsolation: false
           evictionHard:
             nodefs.available: "3%%"
           podCIDR: "%s"

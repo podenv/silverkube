@@ -22,7 +22,6 @@ from os import listdir, environ
 from subprocess import Popen
 from typing import Tuple, List
 from pathlib import Path
-from glob import glob
 
 
 BASE_DIR = Path("~/.cache/silverkube").expanduser()
@@ -35,8 +34,8 @@ environ["GOPATH"] = str(BASE_DIR)
 USERNETES_COMMIT = "09d803c87646985ac371f1369ad03d2f9d46e896"
 # Copy the pins from https://github.com/rootless-containers/usernetes/blob/master/Dockerfile
 ROOTLESSKIT_COMMIT = "c5f0bd3d3d59768c1d3416ef09a6ddb6f0e1e0fb"
-CRIO_COMMIT = "c62a882c54233630e14afddd25c014ebce413f88"
-KUBERNETES_COMMIT = "v1.24.0"
+CRIO_COMMIT = "v1.20.9"
+KUBERNETES_COMMIT = "v1.25.0-alpha.3"
 SLIRP4NETNS_COMMIT = "v1.1.8"
 CRUN_COMMIT = "1.4.5"
 CNI_PLUGINS_COMMIT = "v1.1.1"
