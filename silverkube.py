@@ -21,7 +21,7 @@ from json import dumps as json_dumps
 from os import environ, getuid, getgid, chown
 from subprocess import Popen, PIPE
 from time import sleep
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, NamedTuple
 from sys import argv
 from pathlib import Path
 from textwrap import dedent
@@ -77,20 +77,25 @@ KUBE_ENDPOINT = "10.42.0.1"
 SERVICES_CIDR = "10.42.0.0/16"
 
 # Types
-ServiceName = str
-Command = str
-ExpectedOutput = str
-Enabled = bool
-Check = Tuple[Command, ExpectedOutput]
-File = Tuple[Path, str]
-Service = Tuple[ServiceName, Enabled, List[Command], List[File], Optional[Check]]
+Check = NamedTuple("Check", [("command", str), ("expected", str)])
+File = NamedTuple("File", [("path", Path), ("content", str)])
+Service = NamedTuple(
+    "Service",
+    [
+        ("name", str),
+        ("enabled", bool),
+        ("command", List[str]),
+        ("files", List[File]),
+        ("check", Optional[Check]),
+    ],
+)
 
 # Services
 Services: List[Service] = [
-    (
-        "rootlesskit",
-        USERNETES,
-        [
+    Service(
+        name="rootlesskit",
+        enabled=USERNETES,
+        command=[
             "--state-dir",
             str(RUN / "rk"),
             "--net=slirp4netns --mtu=65520 --disable-host-loopback",
@@ -101,10 +106,10 @@ Services: List[Service] = [
             "--pidns --cgroupns --ipcns --utsns --propagation=rslave",
             str(RKINIT),
         ],
-        [
-            (
-                RKJOIN,
-                dedent(
+        files=[
+            File(
+                path=RKJOIN,
+                content=dedent(
                     """
           #!/bin/sh
           NS="${XDG_RUNTIME_DIR}/silverkube/rk/child_pid"
@@ -123,9 +128,9 @@ Services: List[Service] = [
      """
                 ),
             ),
-            (
-                RKINIT,
-                dedent(
+            File(
+                path=RKINIT,
+                content=dedent(
                     f"""
           #!/bin/sh
           mkdir -p /opt/cni/bin
@@ -150,22 +155,22 @@ Services: List[Service] = [
                 ),
             ),
         ],
-        None,
+        check=None,
     ),
-    (
-        "crio",
-        True,
-        ["--config", str(CONF / "crio.conf")],
-        [
-            (
-                CONF / "crio.conf",
-                dedent(
+    Service(
+        name="crio",
+        enabled=True,
+        command=["--config", str(CONF / "crio.conf")],
+        files=[
+            File(
+                path=CONF / "crio.conf",
+                content=dedent(
                     f"""
           [crio]
           log_dir = "{LOGS}/crio-pods"
           root = "{STORAGE}"
           runroot = "{CRIO_RUNROOT}"
-          storage_driver = "vfs"
+          storage_driver = "overlay"
           storage_option = []
           version_file = "{RUN}/crio-version"
 
@@ -191,7 +196,7 @@ Services: List[Service] = [
           selinux = {'false' if USERNETES else 'false'}
           seccomp_profile = ""
           apparmor_profile = ""
-          cgroup_manager = "cgroupfs"
+          cgroup_manager = "systemd"
           default_sysctls = []
           additional_devices = [
             "/dev/tty1:/dev/tty1:rwm",
@@ -224,15 +229,6 @@ Services: List[Service] = [
           runtime_root = "{RUN}/crun"
           privileged_without_host_devices = true
 
-          [crio.image]
-          default_transport = "docker://"
-          global_auth_file = ""
-          pause_image = "k8s.gcr.io/pause:3.1"
-          pause_image_auth_file = ""
-          pause_command = "/pause"
-          signature_policy = ""
-          image_volumes = "mkdir"
-
           [crio.network]
           network_dir = "{CONF}/net.d/"
           plugin_dirs = ["/usr/libexec/silverkube/cni/"]
@@ -243,9 +239,9 @@ Services: List[Service] = [
      """
                 ),
             ),
-            (
-                CONF / "net.d" / "loopback.conf",
-                dedent(
+            File(
+                path=CONF / "net.d" / "loopback.conf",
+                content=dedent(
                     """
           {
                 "cniVersion": "0.3.0",
@@ -254,9 +250,9 @@ Services: List[Service] = [
      """
                 ),
             ),
-            (
-                CONF / "net.d" / "bridge.conf",
-                dedent(
+            File(
+                path=CONF / "net.d" / "bridge.conf",
+                content=dedent(
                     """
           {
               "cniVersion": "0.3.0",
@@ -278,16 +274,36 @@ Services: List[Service] = [
                     % PODS_CIDR
                 ),
             ),
+            File(
+                path=CONF / "infra-pod.json",
+                content=json_dumps(
+                    {
+                        "metadata": {
+                            "name": "silverkube-infra-pod-1",
+                            "namespace": "silverkube-infra",
+                            "attempt": 1,
+                        },
+                        "image": {"image": "registry.access.redhat.com/ubi8"},
+                        "command": ["/bin/sleep", "infinity"],
+                        "args": [],
+                        "working_dir": "/",
+                        "log_path": "",
+                        "stdin": False,
+                        "stdin_once": False,
+                        "tty": False,
+                    }
+                ),
+            ),
         ],
-        (
-            f"/usr/libexec/silverkube/crictl --runtime-endpoint {CRIOSOCK} version",
-            "RuntimeName:  cri-o",
+        check=Check(
+            command=f"/usr/libexec/silverkube/crictl --runtime-endpoint {CRIOSOCK} version",
+            expected="RuntimeName:  cri-o",
         ),
     ),
-    (
-        "etcd",
-        True,
-        [
+    Service(
+        name="etcd",
+        enabled=True,
+        command=[
             "--name silverkube",
             "--data-dir",
             str(RUN / "etcd"),
@@ -300,13 +316,16 @@ Services: List[Service] = [
             "--advertise-client-urls https://127.0.0.1:2379",
             "--listen-client-urls https://127.0.0.1:2379",
         ],
-        [],
-        (f"curl {etcd_ca} https://localhost:2379/version", "etcdcluste"),
+        files=[],
+        check=Check(
+            command=f"curl {etcd_ca} https://localhost:2379/version",
+            expected="etcdcluste",
+        ),
     ),
-    (
-        "kube-apiserver",
-        True,
-        [
+    Service(
+        name="kube-apiserver",
+        enabled=True,
+        command=[
             "--client-ca-file",
             str(PKI / "ca.pem"),
             "--etcd-cafile",
@@ -344,10 +363,10 @@ Services: List[Service] = [
             # "PodSecurityPolicy",
             f"--v={VERBOSE}",
         ],
-        [
-            (
-                CONF / "abac.json",
-                "\n".join(
+        files=[
+            File(
+                path=CONF / "abac.json",
+                content="\n".join(
                     map(
                         json_dumps,
                         [
@@ -366,12 +385,14 @@ Services: List[Service] = [
                 ),
             )
         ],
-        (f"curl {api_ca} https://localhost:8043/api", "APIVersions"),
+        check=Check(
+            command=f"curl {api_ca} https://localhost:8043/api", expected="APIVersions"
+        ),
     ),
-    (
-        "kube-controller-manager",
-        True,
-        [
+    Service(
+        name="kube-controller-manager",
+        enabled=True,
+        command=[
             "--bind-address 127.0.0.1",
             "--cluster-cidr",
             PODS_CIDR,
@@ -395,32 +416,32 @@ Services: List[Service] = [
             "--use-service-account-credentials=true",
             f"--v={VERBOSE}",
         ],
-        [],
-        None,
+        files=[],
+        check=None,
     ),
-    (
-        "kube-scheduler",
-        True,
-        [
+    Service(
+        name="kube-scheduler",
+        enabled=True,
+        command=[
             "--kubeconfig",
             str(KUBECONFIG),
             f"--v={VERBOSE}",
         ],
-        [],
-        ("/bin/kubectl get componentstatuses", "Healthy"),
+        files=[],
+        check=Check(command="/bin/kubectl get componentstatuses", expected="Healthy"),
     ),
-    (
-        "kube-proxy",
-        True,
-        [
+    Service(
+        name="kube-proxy",
+        enabled=True,
+        command=[
             "--config",
             str(CONF / "kube-proxy.yaml"),
             f"--v={VERBOSE}",
         ],
-        [
-            (
-                CONF / "kube-proxy.yaml",
-                dedent(
+        files=[
+            File(
+                path=CONF / "kube-proxy.yaml",
+                content=dedent(
                     """
           kind: KubeProxyConfiguration
           apiVersion: kubeproxy.config.k8s.io/v1alpha1
@@ -433,12 +454,12 @@ Services: List[Service] = [
                 % (str(KUBECONFIG), SERVICES_CIDR),
             )
         ],
-        None,
+        check=None,
     ),
-    (
-        "kubelet",
-        True,
-        [
+    Service(
+        name="kubelet",
+        enabled=True,
+        command=[
             "--config",
             str(CONF / "kubelet-config.yaml"),
             "--root-dir",
@@ -471,10 +492,10 @@ Services: List[Service] = [
             if USERNETES
             else []
         ),
-        [
-            (
-                CONF / "kubelet-config.yaml",
-                dedent(
+        files=[
+            File(
+                path=CONF / "kubelet-config.yaml",
+                content=dedent(
                     """
           kind: KubeletConfiguration
           apiVersion: kubelet.config.k8s.io/v1beta1
@@ -492,9 +513,9 @@ Services: List[Service] = [
           clusterDomain: "cluster.local"
           clusterDNS:
             - "%s"
+          localStorageCapacityIsolation: false
           featureGates:
             DevicePlugins: false
-            LocalStorageCapacityIsolation: false
           evictionHard:
             nodefs.available: "3%%"
           podCIDR: "%s"
@@ -518,9 +539,9 @@ Services: List[Service] = [
             []
             if USERNETES
             else [
-                (
-                    Path("/etc/systemd/system.conf.d/kubelet-cgroups.conf"),
-                    dedent(
+                File(
+                    path=Path("/etc/systemd/system.conf.d/kubelet-cgroups.conf"),
+                    content=dedent(
                         """
           # Turning on Accounting helps track down performance issues.
           [Manager]
@@ -532,18 +553,20 @@ Services: List[Service] = [
                 )
             ]
         ),
-        ("/bin/kubectl get nodes", "Ready"),
+        check=Check(command="/bin/kubectl get nodes", expected="Ready"),
     ),
-    (
-        "coredns",
-        True,
-        ["--conf", str(CONF / "Corefile")],
-        [
-            (
-                CONF / "Corefile",
-                dedent(
+    Service(
+        name="coredns",
+        enabled=True,
+        command=["--conf", str(CONF / "Corefile")],
+        files=[
+            File(
+                path=CONF / "Corefile",
+                content=dedent(
                     """
           .:53 {
+              errors
+              bind %s
               kubernetes cluster.local silverkube {
                 kubeconfig %s local
                 pods insecure
@@ -552,13 +575,17 @@ Services: List[Service] = [
               cache 30
           }
      """
-                    % str(CONF / "kubeconfig")
+                    % (KUBE_GATEWAY, str(CONF / "kubeconfig"))
                 ),
             )
         ],
-        None,
+        check=None,
     ),
-    # coredns check requires bridge (f"dig @{KUBE_GATEWAY} ns.dns.cluster.local +noall +answer", "10.42.0.1")),
+    # coredns check requires bridge
+    # check=Check(
+    #     command=f"dig @{KUBE_GATEWAY} ns.dns.cluster.local +noall +answer",
+    #     expected="10.42.0.1",
+    # ),
 ]
 
 
@@ -915,7 +942,7 @@ def generate_policy() -> None:
     )
 
 
-def setup_service(name: str, args: List[Command]) -> None:
+def setup_service(name: str, args: List[str]) -> None:
     if name == "rootlesskit" and not USERNETES:
         # No need for that service
         return
@@ -1043,10 +1070,9 @@ def up() -> int:
     generate_kubeconfig(ca)
 
     for service in Services:
-        name, enabled, args, files, check = service
-        if not enabled:
+        if not service.enabled:
             continue
-        for fpath, fcontent in files:
+        for fpath, fcontent in service.files:
             fcontent = fcontent.strip() + "\n"
             fpath.parent.mkdir(parents=True, exist_ok=True)
             if (fpath.exists() and fpath.read_text() != fcontent) or not fpath.exists():
@@ -1055,33 +1081,49 @@ def up() -> int:
                     fpath.chmod(0o755)
                 print(f"{fpath}: updated!")
 
-        setup_service(name, args)
+        setup_service(service.name, service.command)
 
     execute(SYSTEMCTL + ["daemon-reload"])
     for service in Services:
-        if not service[1]:
+        if not service.enabled:
             continue
-        name = service[0]
-        print(f"Starting silverkube-{name}")
-        execute(SYSTEMCTL + ["start", f"silverkube-{name}"])
-    sleep(3)
+        print(f"Starting silverkube-{service.name}")
+        execute(SYSTEMCTL + ["start", f"silverkube-{service.name}"])
+        if service.name == "crio" and not Path("/sys/class/net/sk0").exists():
+            # Start an infra pod to create the sk0 bridge
+            for retry in range(3):
+                sleep(1)
+                try:
+                    execute(
+                        [
+                            "sudo",
+                            "/usr/libexec/silverkube/crictl",
+                            "--runtime-endpoint",
+                            CRIOSOCK,
+                            "runp",
+                            str(CONF / "infra-pod.json"),
+                        ]
+                    )
+                    break
+                except:
+                    sleep(2)
+
     environ["KUBECONFIG"] = str(KUBECONFIG)
     for service in Services:
-        name, enabled, args, files, check = service
-        if not enabled:
+        if not service.enabled:
             continue
-        print(f"Checking silverkube-{name}")
-        execute(SYSTEMCTL + ["is-active", f"silverkube-{name}"])
-        if check:
+        print(f"Checking silverkube-{service.name}")
+        execute(SYSTEMCTL + ["is-active", f"silverkube-{service.name}"])
+        if service.check:
             for retry in range(10):
-                res = pread(NSJOIN + check[0].split())
-                if check[1] in res[0]:
+                res = pread(NSJOIN + service.check.command.split())
+                if service.check.expected in res[0]:
                     break
                 print(".", end="")
                 sleep(2)
             else:
                 print(res)
-                raise RuntimeError(f"Fail to check {name}")
+                raise RuntimeError(f"Fail to check {service.name}")
     print("up!")
     generate_pvs()
     # disable psp for now
@@ -1102,12 +1144,11 @@ def down() -> int:
     except RuntimeError:
         pass
     for service in reversed(Services):
-        name, enabled, args, files, check = service
-        if not enabled:
+        if not service.enabled:
             continue
-        print(f"Stopping silverkube-{name}")
+        print(f"Stopping silverkube-{service.name}")
         try:
-            execute(SYSTEMCTL + ["stop", f"silverkube-{name}"])
+            execute(SYSTEMCTL + ["stop", f"silverkube-{service.name}"])
         except RuntimeError:
             pass
     print("down!")
