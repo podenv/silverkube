@@ -3,7 +3,7 @@ Version: 0.3.0
 Release: 1%{?dist}
 Summary: A kubernetes service for desktop
 
-Requires: iptables, ipset, conntrack-tools, containers-common, kubernetes-client, openssl
+Requires: bind-utils iptables, ipset, conntrack-tools, containers-common, kubernetes-client, openssl
 Requires(post): udica
 Requires(post): coreutils
 

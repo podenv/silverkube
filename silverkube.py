@@ -274,6 +274,26 @@ Services: List[Service] = [
                     % PODS_CIDR
                 ),
             ),
+            File(
+                path=CONF / "infra-pod.json",
+                content=json_dumps(
+                    {
+                        "metadata": {
+                            "name": "silverkube-infra-pod-1",
+                            "namespace": "silverkube-infra",
+                            "attempt": 1,
+                        },
+                        "image": {"image": "registry.access.redhat.com/ubi8"},
+                        "command": ["/bin/sleep", "infinity"],
+                        "args": [],
+                        "working_dir": "/",
+                        "log_path": "",
+                        "stdin": False,
+                        "stdin_once": False,
+                        "tty": False,
+                    }
+                ),
+            ),
         ],
         check=Check(
             command=f"/usr/libexec/silverkube/crictl --runtime-endpoint {CRIOSOCK} version",
@@ -545,6 +565,7 @@ Services: List[Service] = [
                 content=dedent(
                     """
           .:53 {
+              errors
               bind %s
               kubernetes cluster.local silverkube {
                 kubeconfig %s local
@@ -560,7 +581,11 @@ Services: List[Service] = [
         ],
         check=None,
     ),
-    # coredns check requires bridge (f"dig @{KUBE_GATEWAY} ns.dns.cluster.local +noall +answer", "10.42.0.1")),
+    # coredns check requires bridge
+    # check=Check(
+    #     command=f"dig @{KUBE_GATEWAY} ns.dns.cluster.local +noall +answer",
+    #     expected="10.42.0.1",
+    # ),
 ]
 
 
@@ -1064,7 +1089,25 @@ def up() -> int:
             continue
         print(f"Starting silverkube-{service.name}")
         execute(SYSTEMCTL + ["start", f"silverkube-{service.name}"])
-    sleep(3)
+        if service.name == "crio" and not Path("/sys/class/net/sk0").exists():
+            # Start an infra pod to create the sk0 bridge
+            for retry in range(3):
+                sleep(1)
+                try:
+                    execute(
+                        [
+                            "sudo",
+                            "/usr/libexec/silverkube/crictl",
+                            "--runtime-endpoint",
+                            CRIOSOCK,
+                            "runp",
+                            str(CONF / "infra-pod.json"),
+                        ]
+                    )
+                    break
+                except:
+                    sleep(2)
+
     environ["KUBECONFIG"] = str(KUBECONFIG)
     for service in Services:
         if not service.enabled:
