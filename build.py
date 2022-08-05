@@ -248,6 +248,7 @@ def main():
     SRC_DIR.mkdir(exist_ok=True, parents=True)
     BIN_DIR.mkdir(exist_ok=True, parents=True)
     SOURCES_DIR.mkdir(exist_ok=True, parents=True)
+    LOCAL_INSTALL = environ.get("NO_INSTALL", "") == ""
     execute(["sudo", "dnf", "install", "-y"] + list(BuildReq))
     bins = (
         build_rootless()
@@ -298,6 +299,16 @@ def main():
             "",
         ]
     )
+
+    if LOCAL_INSTALL:
+        def ln(p, d):
+            execute(["sudo", "ln", "-sf", str(p), str(d / p.name)])
+
+        execute(["sudo", "mkdir", "-p", "/usr/libexec/silverkube/cni"])
+        for p in bins:
+            ln(p, Path("/usr/libexec/silverkube"))
+        for p in cnis:
+            ln(p, Path("/usr/libexec/silverkube/cni"))
 
     def sd(mode: str, path: str, srcs: List[Path]) -> List[Tuple[str, str]]:
         return list(map(lambda x: (mode, path + "/" + x.name), srcs))
