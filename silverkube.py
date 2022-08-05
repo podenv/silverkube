@@ -229,15 +229,6 @@ Services: List[Service] = [
           runtime_root = "{RUN}/crun"
           privileged_without_host_devices = true
 
-          [crio.image]
-          default_transport = "docker://"
-          global_auth_file = ""
-          pause_image = "k8s.gcr.io/pause:3.1"
-          pause_image_auth_file = ""
-          pause_command = "/pause"
-          signature_policy = ""
-          image_volumes = "mkdir"
-
           [crio.network]
           network_dir = "{CONF}/net.d/"
           plugin_dirs = ["/usr/libexec/silverkube/cni/"]
