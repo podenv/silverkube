@@ -196,7 +196,7 @@ Services: List[Service] = [
           selinux = {'false' if USERNETES else 'false'}
           seccomp_profile = ""
           apparmor_profile = ""
-          cgroup_manager = "cgroupfs"
+          cgroup_manager = "systemd"
           default_sysctls = []
           additional_devices = [
             "/dev/tty1:/dev/tty1:rwm",
