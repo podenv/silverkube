@@ -40,7 +40,7 @@ podman run --rm -it \
 
 ## Usage
 
-- Make sure the hostname resolve to localhost, and run `systemctl stop systemd-resolved`
+- Make sure the hostname resolve to localhost
 
 - Start the services rootless
 

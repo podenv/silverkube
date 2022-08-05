@@ -545,6 +545,7 @@ Services: List[Service] = [
                 content=dedent(
                     """
           .:53 {
+              bind %s
               kubernetes cluster.local silverkube {
                 kubeconfig %s local
                 pods insecure
@@ -553,7 +554,7 @@ Services: List[Service] = [
               cache 30
           }
      """
-                    % str(CONF / "kubeconfig")
+                    % (KUBE_GATEWAY, str(CONF / "kubeconfig"))
                 ),
             )
         ],
